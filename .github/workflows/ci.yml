@@ -11,6 +11,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # needed for `nx affected` to diff against the base branch
 
       - uses: actions/setup-node@v4
         with:
@@ -19,16 +21,19 @@ jobs:
 
       - run: npm ci
 
-      # --workspaces --if-present runs the script in every workspace that defines it and
-      # silently skips the ones that don't yet (apps/api starts empty at M0/M1).
-      - name: Lint
-        run: npm run lint --workspaces --if-present
+      - name: Cache Nx
+        uses: actions/cache@v4
+        with:
+          path: .nx/cache
+          key: nx-${{ runner.os }}-${{ github.job }}-${{ github.sha }}
+          restore-keys: nx-${{ runner.os }}-${{ github.job }}-
 
-      - name: Typecheck
-        run: npm run typecheck --workspaces --if-present
-
-      - name: Test
-        run: npm test --workspaces --if-present
-
-      - name: Build
-        run: npm run build --workspaces --if-present
+      # run-many covers `push` to main; affected (against origin/main) narrows PR runs to
+      # only what changed. Targets that a project doesn't define are skipped, not failed.
+      - name: Lint, typecheck, test, build
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            npx nx affected -t lint typecheck test build --base=origin/${{ github.base_ref }}
+          else
+            npx nx run-many -t lint typecheck test build
+          fi

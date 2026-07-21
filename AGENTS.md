@@ -5,26 +5,34 @@ and milestones, see `CLAUDE.md`.
 
 ## Build & Development Commands
 
+Task running goes through **Nx** (npm workspaces underneath, Nx adds caching + affected-only
+runs — no framework-specific Nx plugins installed, this is plain task orchestration).
+
 ```bash
-# Install dependencies (root, installs both workspaces)
+# Install dependencies (root, installs both workspaces + nx)
 npm install
 
 # Development
-npm run dev:web       # Next.js dev server (apps/web)
-npm run dev:api       # NestJS dev server (apps/api) — exists from M1 onward
+npm run dev:web              # Next.js dev server (apps/web)
+npm run dev:api              # NestJS dev server (apps/api) — exists from M1 onward
 
-# Code quality (runs in every workspace that defines the script, skips the rest)
-npm run lint --workspaces --if-present
-npm run typecheck --workspaces --if-present
-npm run build --workspaces --if-present
-npm test --workspaces --if-present
+# Code quality — runs across every project that has the target, cached, skips the rest
+npx nx run-many -t lint typecheck test build
+
+# Only re-run what's affected by your current changes vs main
+npx nx affected -t lint typecheck test build
+
+# Single project / single target
+npx nx run web:build
+npx nx run @split-lab/api:test    # once M1 adds a test script
 ```
 
 **Requirements:** Node.js 20+, Docker (Postgres/Redis/RabbitMQ from M2 onward).
 
-`apps/api` scripts above don't exist yet — they land in M1 (NestJS skeleton). Once you add
-`dev`/`lint`/`typecheck`/`test`/`build` to `apps/api/package.json`, the root scripts and CI
-pick them up automatically — nothing else to wire.
+`apps/api` targets above don't exist yet — they land in M1 (NestJS skeleton). Once you add
+`dev`/`lint`/`typecheck`/`test`/`build` scripts to `apps/api/package.json`, Nx and CI pick
+them up automatically — nothing else to wire. Project name is `@split-lab/api` (from its
+`package.json` `name` field), `web` for the frontend — confirm with `npx nx show projects`.
 
 ## Architecture
 
