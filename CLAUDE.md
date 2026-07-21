@@ -1,3 +1,5 @@
+@AGENTS.md
+
 # split-lab
 
 Feature-flag / A/B-testing platform. Direction: growthbook.io-inspired (feature flags, experiments, rollout %, results), own scope, not a clone.
