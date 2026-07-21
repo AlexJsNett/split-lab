@@ -5,34 +5,41 @@ and milestones, see `CLAUDE.md`.
 
 ## Build & Development Commands
 
-Task running goes through **Nx** (npm workspaces underneath, Nx adds caching + affected-only
-runs — no framework-specific Nx plugins installed, this is plain task orchestration).
+Task running goes through **Turborepo** (npm workspaces underneath, turbo adds caching +
+affected-only runs via `--filter`).
 
 ```bash
-# Install dependencies (root, installs both workspaces + nx)
+# Install dependencies (root, installs both workspaces + turbo)
 npm install
 
 # Development
 npm run dev:web              # Next.js dev server (apps/web)
 npm run dev:api              # NestJS dev server (apps/api) — exists from M1 onward
 
-# Code quality — runs across every project that has the target, cached, skips the rest
-npx nx run-many -t lint typecheck test build
+# Code quality — runs across every package that has the script, cached, skips the rest
+npm run lint       # turbo run lint
+npm run typecheck  # turbo run typecheck
+npm run test       # turbo run test
+npm run build      # turbo run build
 
-# Only re-run what's affected by your current changes vs main
-npx nx affected -t lint typecheck test build
+# Only re-run what's affected since a given ref
+npx turbo run lint typecheck test build --filter="...[origin/main]"
 
-# Single project / single target
-npx nx run web:build
-npx nx run @split-lab/api:test    # once M1 adds a test script
+# Single package
+npx turbo run build --filter=web
+npx turbo run test --filter=@split-lab/api   # once M1 adds a test script
 ```
 
 **Requirements:** Node.js 20+, Docker (Postgres/Redis/RabbitMQ from M2 onward).
 
-`apps/api` targets above don't exist yet — they land in M1 (NestJS skeleton). Once you add
-`dev`/`lint`/`typecheck`/`test`/`build` scripts to `apps/api/package.json`, Nx and CI pick
-them up automatically — nothing else to wire. Project name is `@split-lab/api` (from its
-`package.json` `name` field), `web` for the frontend — confirm with `npx nx show projects`.
+`apps/api` scripts above don't exist yet — they land in M1 (NestJS skeleton). Once you add
+`dev`/`lint`/`typecheck`/`test`/`build` scripts to `apps/api/package.json`, turbo and CI pick
+them up automatically — nothing else to wire, as long as the task name matches an entry in
+`turbo.json`. Package name is `@split-lab/api` (from its `package.json` `name` field), `web`
+for the frontend.
+
+`.turbo/` is gitignored — its per-task log files change every run, and if they aren't
+ignored they end up hashed as task inputs and silently defeat the cache.
 
 ## Architecture
 

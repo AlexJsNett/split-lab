@@ -12,7 +12,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0 # needed for `nx affected` to diff against the base branch
+          fetch-depth: 0 # needed for turbo's --filter=...[base] to diff against the base branch
 
       - uses: actions/setup-node@v4
         with:
@@ -21,19 +21,19 @@ jobs:
 
       - run: npm ci
 
-      - name: Cache Nx
+      - name: Cache Turbo
         uses: actions/cache@v4
         with:
-          path: .nx/cache
-          key: nx-${{ runner.os }}-${{ github.job }}-${{ github.sha }}
-          restore-keys: nx-${{ runner.os }}-${{ github.job }}-
+          path: .turbo/cache
+          key: turbo-${{ runner.os }}-${{ github.job }}-${{ github.sha }}
+          restore-keys: turbo-${{ runner.os }}-${{ github.job }}-
 
-      # run-many covers `push` to main; affected (against origin/main) narrows PR runs to
-      # only what changed. Targets that a project doesn't define are skipped, not failed.
+      # Full run on push to main; PRs narrow to packages affected since the base branch.
+      # A task a package doesn't define is skipped, not failed.
       - name: Lint, typecheck, test, build
         run: |
           if [ "${{ github.event_name }}" = "pull_request" ]; then
-            npx nx affected -t lint typecheck test build --base=origin/${{ github.base_ref }}
+            npx turbo run lint typecheck test build --filter="...[origin/${{ github.base_ref }}]"
           else
-            npx nx run-many -t lint typecheck test build
+            npx turbo run lint typecheck test build
           fi
