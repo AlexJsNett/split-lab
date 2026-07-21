@@ -38,18 +38,33 @@ them up automatically — nothing else to wire. Project name is `@split-lab/api`
 
 Monorepo, npm workspaces, one root git repo.
 
-| Package    | What                                                    | Status                |
-| ---------- | -------------------------------------------------------- | ---------------------- |
-| `apps/web` | Next.js (App Router, TS, Tailwind) — UI only, no DB/logic | scaffolded (boilerplate) |
-| `apps/api` | NestJS — all domain logic, DB, auth, queues               | not started (M1)       |
+| Package    | What                                                              | Status                    |
+| ---------- | ------------------------------------------------------------------ | -------------------------- |
+| `apps/web` | Next.js (App Router, TS) + Tailwind + shadcn/ui + React Query — UI only, no DB/logic | scaffolded (boilerplate)  |
+| `apps/api` | NestJS — all domain logic, DB, auth, queues                         | not started (M1)           |
 
 Import boundary: `apps/web` talks to `apps/api` only over HTTP (fetch calls to REST
 endpoints). It never imports backend code, never touches the DB directly.
 
+### apps/web tooling
+
+- **shadcn/ui** on top of Tailwind — components get added on demand with
+  `npx shadcn@latest add <component>` (writes into `src/components/ui/`), not hand-rolled.
+- **React Query** (`@tanstack/react-query`) for all server state — every read from `apps/api`
+  goes through a query hook, every write through a mutation hook. Not Redux: there's no
+  significant client-only state here, this app is a dashboard over REST resources, and
+  Query already handles caching/invalidation/refetch for exactly that shape. Revisit only if
+  real cross-cutting client state shows up that Query genuinely can't model (rare for this
+  app's scope). Provider is wired in `src/app/providers.tsx` — already in place, M6 just
+  adds real query hooks against it.
+
 ### apps/api (target shape, fills in per milestone)
 
-- Modules/controllers/services/DTOs — standard NestJS structure, one module per domain
-  concept (`ProjectsModule`, `FlagsModule`, `ExperimentsModule`, `EventsModule`).
+Folder architecture is FSD-inspired + screaming + clean-architecture-lite, not the default
+Nest tutorial layout. Full convention and rationale: `.agents/guides/backend/api-patterns.md`
+— read it before scaffolding M1, it decides where files go from the start.
+
+- `entities/<noun>/` (domain + infrastructure) for things with a table behind them; `features/<verb>/` for use-cases that read/write them. No top-level `controllers/`/`services/`/`dto/` buckets.
 - TypeORM entities + migrations, no `synchronize: true` outside local scratch experiments.
 - `class-validator` DTOs at the controller boundary — never trust raw request bodies past
   the DTO layer.
