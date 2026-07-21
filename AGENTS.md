@@ -41,6 +41,21 @@ for the frontend.
 `.turbo/` is gitignored — its per-task log files change every run, and if they aren't
 ignored they end up hashed as task inputs and silently defeat the cache.
 
+## Git & GitHub
+
+Local history stays plain `git` (`add`/`commit`/`branch`/`push`/`merge` — `gh` doesn't
+replace any of that). Everything that talks to GitHub itself goes through **`gh`** instead of
+the browser or raw API calls:
+
+```bash
+gh repo view                          # repo info instead of opening the browser
+gh pr create / gh pr view / gh pr diff
+gh issue create / gh issue list
+gh auth status                        # already logged in as AlexJsNett
+```
+
+Repo: `git@github.com:AlexJsNett/split-lab.git` (`origin`, `main`).
+
 ## Architecture
 
 Monorepo, npm workspaces, one root git repo.
