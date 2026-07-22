@@ -164,3 +164,9 @@ the target list, and it's already how this project works.
 - When stuck for a while (not immediately), it's fine to ask for a hint or to see how a
   specific pattern is usually done — just say so explicitly so Claude knows it's a
   deliberate exception, not the default mode.
+- **Teach, don't just direct.** The developer is learning NestJS (and the rest of the target
+  stack) as they go — when giving a task, explain *why* the config/pattern is shaped that way,
+  not just the steps. Concrete conceptual explanations (DI, decorators, module boundaries,
+  etc.) that come up along the way belong in `.agents/guides/backend/nestjs-concepts.md` —
+  add to it as new concepts get explained, don't just answer once and let it evaporate from
+  the conversation.

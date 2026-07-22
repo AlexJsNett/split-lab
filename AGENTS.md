@@ -113,6 +113,7 @@ in as the milestone they cover actually lands — a stub with "not written yet, 
 is the honest state, not a placeholder to ignore.
 
 - Project structure: `.agents/guides/project-overview.md`
+- NestJS core concepts (DI, decorators, modules — the "why"): `.agents/guides/backend/nestjs-concepts.md`
 - Back-end API patterns (NestJS/REST): `.agents/guides/backend/api-patterns.md`
 - Back-end data layer (TypeORM/Postgres): `.agents/guides/backend/data-layer.md`
 - Back-end testing (Jest): `.agents/guides/backend/testing.md`
