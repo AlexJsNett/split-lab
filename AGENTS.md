@@ -99,8 +99,11 @@ Nest tutorial layout. Full convention and rationale: `.agents/guides/backend/api
   `class-validator`/DTOs before it's trusted.
 - **RESTful design** — resource-oriented routes (`/projects/:id/flags`, not `/getFlags`),
   correct status codes (201 on create, 404 vs 400 distinction, etc.), no verbs in URLs.
-- **Testing policy** — unit-test service/logic classes (especially anything with branching,
-  like variant assignment); don't chase coverage on thin controllers that just delegate.
+- **Testing policy** — 100% test coverage, every milestone. Unit tests for services/logic
+  (branching, variant assignment, etc.) AND thin controllers/DTOs too — deliberate choice
+  over the usual "skip trivial delegates" advice, because the extra e2e/mock practice on
+  simple code is itself part of what this project trains. Write tests alongside each
+  milestone's code, not deferred to M8.
 - **Errors** — throw Nest's built-in HTTP exceptions (`NotFoundException`, etc.) from
   services, don't hand-roll status codes in controllers.
 - **Env vars** — read through a config module (`@nestjs/config`), never scattered
