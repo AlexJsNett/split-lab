@@ -2,6 +2,10 @@ import { Module } from '@nestjs/common';
 import { HealthController } from './health.controller';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { ProjectModule } from '@/entities/project/project.module';
+import { ProjectEntity } from '@/entities/project/infrastructure/project.entity';
+import { FeatureFlagModule } from '@/entities/feature-flag/feature-flag.module';
+import { FeatureFlagEntity } from '@/entities/feature-flag/infrastructure/feature-flag.entity';
 
 @Module({
   imports: [
@@ -15,10 +19,12 @@ import { TypeOrmModule } from '@nestjs/typeorm';
         username: config.get('DB_USER'),
         password: config.get('DB_PASSWORD'),
         database: config.get('DB_NAME'),
-        entities: [],
+        entities: [ProjectEntity, FeatureFlagEntity],
         synchronize: false,
       }),
     }),
+    ProjectModule,
+    FeatureFlagModule,
   ],
   controllers: [HealthController],
 })

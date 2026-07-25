@@ -45,6 +45,8 @@ variant weights.
 ## Status
 
 - [x] M1 — NestJS skeleton done (`GET /health`, `dev:api` wired).
-- [ ] M2 — Data layer — current. See `.agents/project/milestones.md` for M3+.
+- [x] M2 — Data layer done. Postgres in Docker, TypeORM connected, `Project`/`FeatureFlag`
+      entities + first migration (`InitSchema`) applied.
+- [ ] M3 — Projects & Flags CRUD — current. See `.agents/project/milestones.md` for M4+.
 - This section should be updated (which milestone is current, what changed structurally)
   whenever a milestone that touches architecture lands — not left stale.

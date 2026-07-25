@@ -8,7 +8,7 @@ planning the next one or checking what's still ahead.
 
 - [x] **M1 — NestJS skeleton**: `nest new`, `GET /health` returns 200, TypeScript configured,
       dev script with hot reload. Wire `dev:api` at the root to run it.
-- [ ] **M2 — Data layer**: Docker Compose with a Postgres container, TypeORM connected,
+- [x] **M2 — Data layer**: Docker Compose with a Postgres container, TypeORM connected,
       entities for `Project` and `FeatureFlag`, migrations (not `synchronize: true`).
 - [ ] **M3 — Projects & Flags CRUD**: NestJS controllers/services/DTOs, `class-validator`
       input validation, meaningful error responses (RESTful conventions — status codes,
