@@ -105,7 +105,20 @@ fix, and get reviewed before it ever touches real data. Bonus with migrations: e
 environment applies the identical, ordered set of files, so dev/staging/prod schemas can't
 drift apart the way independently-`synchronize`d local databases can.
 
-## Known gotcha: pin `@nestjs/core`/`common`/`platform-express`/`testing` to `11.0.1`
+## TODO — hands-on exercise: watch `synchronize: true` actually destroy data
+
+Do this once M3 (CRUD) exists and there's real seed data (a handful of `Project`/`FeatureFlag`
+rows created through the actual API, not just the migration). The write-up above is the
+explanation; this is doing it with your own hands so it's not just theory:
+
+1. Seed a few rows via the M3 endpoints, note down real `rolloutPercent` values.
+2. On a throwaway branch: rename `rolloutPercent` → `rolloutPct` in `FeatureFlagEntity`, flip
+   `synchronize: true` temporarily in `data-source.ts`/`app.module.ts`, restart the app.
+3. Check the table — confirm the values are actually gone (`rolloutPct` reset to `0`).
+4. Revert, do it the real way instead: `migration:generate`, read the generated file, hand-edit
+   the `DROP`+`ADD` into a `RENAME COLUMN`, `migration:run`, confirm the values survived.
+
+Delete this TODO once done — the point is doing it once, not keeping it as a checklist.
 
 ## Known gotcha: pin `@nestjs/core`/`common`/`platform-express`/`testing` to `11.0.1`
 
