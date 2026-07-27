@@ -14,12 +14,14 @@ jobs:
         with:
           fetch-depth: 0 # needed for turbo's --filter=...[base] to diff against the base branch
 
+      - uses: pnpm/action-setup@v4 # reads the pinned version from package.json's packageManager field
+
       - uses: actions/setup-node@v4
         with:
           node-version: 24
-          cache: npm
+          cache: pnpm
 
-      - run: npm ci
+      - run: pnpm install --frozen-lockfile
 
       - name: Cache Turbo
         uses: actions/cache@v4
@@ -33,7 +35,7 @@ jobs:
       - name: Lint, typecheck, test, build
         run: |
           if [ "${{ github.event_name }}" = "pull_request" ]; then
-            npx turbo run lint typecheck test build --filter="...[origin/${{ github.base_ref }}]"
+            pnpm exec turbo run lint typecheck test build --filter="...[origin/${{ github.base_ref }}]"
           else
-            npx turbo run lint typecheck test build
+            pnpm exec turbo run lint typecheck test build
           fi

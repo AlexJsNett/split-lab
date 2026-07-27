@@ -34,11 +34,11 @@ fixed by adding a `"ts-node": { "require": ["tsconfig-paths/register"] }` block 
 `tsconfig.json`, so this applies to any file the CLI touches, not just `data-source.ts`).
 
 Scripts (`apps/api/package.json`):
-- `npm run migration:generate -- src/migrations/<Name>` — diffs entities against the actual
+- `pnpm run migration:generate -- src/migrations/<Name>` — diffs entities against the actual
   DB schema, writes the SQL to a new file. Doesn't touch the database.
-- `npm run migration:run` — applies pending migrations, in order, tracked in a `migrations`
+- `pnpm run migration:run` — applies pending migrations, in order, tracked in a `migrations`
   table TypeORM creates for itself (so re-running is a no-op for already-applied ones).
-- `npm run migration:revert` — undoes the last applied migration via its `down()`.
+- `pnpm run migration:revert` — undoes the last applied migration via its `down()`.
 
 **Always read a generated migration file before running it** — `migration:generate` is a
 mechanical diff, not a judgment call; see the rename example below for exactly what it gets
@@ -76,7 +76,7 @@ No confirmation, no review, no rollback — happened live in prod
 Entity change: rolloutPercent → rolloutPct
         │
         ▼
-npm run migration:generate
+pnpm run migration:generate
         │
         ▼
 TypeORM writes the SQL to a FILE — same naive DROP+ADD, but nothing
@@ -91,7 +91,7 @@ drop real data, and hand-edit it:
 Commit the migration file — reviewable in a PR like any other code change
         │
         ▼
-npm run migration:run — the exact same file runs on dev, staging, and
+pnpm run migration:run — the exact same file runs on dev, staging, and
 prod, in the same order, every time
         │
         ▼

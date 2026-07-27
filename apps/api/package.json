@@ -80,6 +80,9 @@
     ],
     "coverageDirectory": "../coverage",
     "testEnvironment": "node",
-    "passWithNoTests": true
+    "passWithNoTests": true,
+    "moduleNameMapper": {
+      "^@/(.*)$": "<rootDir>/$1"
+    }
   }
 }

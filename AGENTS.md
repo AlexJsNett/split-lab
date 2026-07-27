@@ -5,38 +5,47 @@ and milestones, see `CLAUDE.md`.
 
 ## Build & Development Commands
 
-Task running goes through **Turborepo** (npm workspaces underneath, turbo adds caching +
-affected-only runs via `--filter`).
+Task running goes through **Turborepo** (pnpm workspaces underneath, turbo adds caching +
+affected-only runs via `--filter`). Package manager is **pnpm**, pinned via the
+`packageManager` field in the root `package.json` (corepack-managed, not a global Homebrew
+install — see `pnpm-workspace.yaml`'s `allowBuilds` note below).
 
 ```bash
 # Install dependencies (root, installs both workspaces + turbo)
-npm install
+pnpm install
 
-# Development
-npm run dev:web              # Next.js dev server (apps/web)
-npm run dev:api              # NestJS dev server (apps/api) — exists from M1 onward
+# Development (root-only script names, no ambiguity with workspace scripts)
+pnpm dev:web              # Next.js dev server (apps/web)
+pnpm dev:api              # NestJS dev server (apps/api)
 
 # Code quality — runs across every package that has the script, cached, skips the rest
-npm run lint       # turbo run lint
-npm run typecheck  # turbo run typecheck
-npm run test       # turbo run test
-npm run build      # turbo run build
+# -w ("workspace root") is required here: these script names ALSO exist inside apps/*,
+# and pnpm defaults to running a same-named script in every workspace package instead of
+# the root's own script unless told explicitly which one you mean.
+pnpm -w lint       # turbo run lint
+pnpm -w typecheck  # turbo run typecheck
+pnpm -w test       # turbo run test
+pnpm -w build      # turbo run build
 
 # Only re-run what's affected since a given ref
-npx turbo run lint typecheck test build --filter="...[origin/main]"
+pnpm exec turbo run lint typecheck test build --filter="...[origin/main]"
 
 # Single package
-npx turbo run build --filter=web
-npx turbo run test --filter=@split-lab/api   # once M1 adds a test script
+pnpm exec turbo run build --filter=web
+pnpm exec turbo run test --filter=@split-lab/api
 ```
 
 **Requirements:** Node.js 20+, Docker (Postgres/Redis/RabbitMQ from M2 onward).
 
-`apps/api` scripts above don't exist yet — they land in M1 (NestJS skeleton). Once you add
-`dev`/`lint`/`typecheck`/`test`/`build` scripts to `apps/api/package.json`, turbo and CI pick
-them up automatically — nothing else to wire, as long as the task name matches an entry in
-`turbo.json`. Package name is `@split-lab/api` (from its `package.json` `name` field), `web`
-for the frontend.
+Package name is `@split-lab/api` (from its `package.json` `name` field), `web` for the
+frontend — both used with turbo's `--filter`.
+
+`pnpm-workspace.yaml`'s `allowBuilds` block is pnpm's supply-chain gate: packages with an
+install/postinstall script are ignored by default unless explicitly allowed. `sharp` and
+`unrs-resolver` need their native binaries built (image processing, ESLint's resolver) so
+they're `true`; `@nestjs/core`'s install script is just an opencollective funding notice, set
+`false`. Revisit if a new dependency's build gets silently skipped — pnpm warns about it on
+install.
 
 `.turbo/` is gitignored — its per-task log files change every run, and if they aren't
 ignored they end up hashed as task inputs and silently defeat the cache.

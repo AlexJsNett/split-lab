@@ -5,7 +5,7 @@ Feature-flag / A/B-testing platform. See root `CLAUDE.md` for roles/working agre
 `.agents/project/milestones.md` for the full milestone list. This file is the living
 architecture snapshot, updated as milestones land.
 
-## Monorepo Structure (npm workspaces)
+## Monorepo Structure (pnpm workspaces)
 
 ```
 split-lab/
