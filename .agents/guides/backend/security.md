@@ -21,11 +21,38 @@ shape is already committed, retrofitting hashing after real projects/keys exist 
 migration + forcing everyone to regenerate keys.
 
 **A06 — Vulnerable & Outdated Components.**
-Already partially addressed: `pnpm-lock.yaml` pins exact versions + integrity hashes,
-`pnpm-workspace.yaml`'s `allowBuilds` gate limits which packages can run install scripts (see
-`AGENTS.md`). Still missing: an automated check for known-vulnerable versions. Add
-`pnpm audit` (or `pnpm audit --prod`) as a CI step once M3 stabilizes dependencies — cheap,
-catches CVEs in transitive deps before they ship.
+Ran `pnpm audit` right after the npm→pnpm migration (2026-07-27) — found 23 real
+vulnerabilities (9 high), not just the "deprecated subdependency" warnings pnpm prints on
+every install. Fixed 20 of them:
+- `@nestjs/core` pin re-bisected from `11.0.1` to `11.1.18` — same TypeORM compatibility, but
+  `11.1.18` also patches a moderate injection vulnerability that `11.0.1` still had (see
+  `data-layer.md`'s gotcha section for the full bisection story). This alone also pulled a
+  patched `path-to-regexp`, `qs`, and `body-parser` along with it (all transitive through
+  `@nestjs/core`/`express`).
+- `next` bumped `16.2.10` → `16.2.12` in `apps/web`, patching several Next.js-specific highs
+  (middleware bypass, SSRF in rewrites/server actions, DoS) plus pulling a patched `sharp`.
+- `postcss` and `sharp` still resolved to vulnerable versions transitively through `next` even
+  after the bump — forced via `pnpm-workspace.yaml`'s `overrides` block (pins a specific
+  version regardless of what the parent package asks for).
+
+**Overrides are not free — learned this the hard way**: also tried overriding
+`brace-expansion` (patches a DoS in `typeorm`'s migration-CLI dependency chain), and it broke
+ESLint outright (`TypeError: expand is not a function`) — ESLint's own toolchain pins an older
+`minimatch` that expects the *old* `brace-expansion` API, and the override applies globally to
+every consumer in the tree, not just the vulnerable path. Reverted that one specific override.
+Lesson: an override is a blunt instrument — verify the full test/lint/build suite after adding
+one, don't just re-run `pnpm audit` and call it done.
+
+**Deliberately left unfixed, for now:**
+- `multer` (high + moderate, via `@nestjs/platform-express`) — the patched version is a major
+  bump (`1.x` → `2.2.0`), real risk of breaking API changes. Not worth the risk since the app
+  doesn't use file uploads at all yet — revisit if/when a feature actually needs `multer`.
+- `@hono/node-server` (moderate, path traversal) — pulled in by `shadcn`'s CLI tooling
+  (`apps/web`'s component generator), not part of what actually ships or runs. Dev-tool-only,
+  lowest priority.
+
+**Still to do:** add `pnpm audit` as a CI step so new vulnerabilities in future dependency
+bumps get caught automatically instead of found by hand like this one was.
 
 ## Deferred — exploit demo lands with the milestone that creates the surface
 

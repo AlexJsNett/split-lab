@@ -23,6 +23,15 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
+      # Informational for now, not blocking: two known findings are deliberately accepted
+      # (multer — unused feature, fix is a breaking major bump; @hono/node-server — pulled in
+      # by shadcn's dev-only CLI, never ships). See security.md's A06 section. Make this a
+      # hard gate (drop continue-on-error) once those two are resolved or a real allowlist
+      # mechanism is in place.
+      - name: Dependency audit
+        continue-on-error: true
+        run: pnpm audit
+
       - name: Cache Turbo
         uses: actions/cache@v4
         with:

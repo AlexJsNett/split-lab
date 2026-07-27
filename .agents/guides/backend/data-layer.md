@@ -120,7 +120,7 @@ explanation; this is doing it with your own hands so it's not just theory:
 
 Delete this TODO once done — the point is doing it once, not keeping it as a checklist.
 
-## Known gotcha: pin `@nestjs/core`/`common`/`platform-express`/`testing` to `11.0.1`
+## Known gotcha: pin `@nestjs/core`/`common`/`platform-express`/`testing` to `11.1.18`
 
 `npm install` on a fresh M2 setup resolves `@nestjs/core` to its newest version (`11.1.28` at
 the time this was hit), but `@nestjs/typeorm@11.0.3` (itself the newest available) breaks
@@ -135,9 +135,11 @@ available in the TypeOrmCoreModule module.
 Not a config mistake — `ModuleRef` is a Nest-internal class that's normally always injectable
 without any explicit import. Confirmed by directly resolving both packages' `require()` paths:
 they pointed at the exact same on-disk `@nestjs/core`, so it wasn't a duplicate-copy problem
-either. Bisecting versions was what worked: pinning `@nestjs/core`, `@nestjs/common`,
-`@nestjs/platform-express`, `@nestjs/testing` down to `11.0.1` (exact, via `--save-exact` —
-no `^`, so a routine `npm install` can't silently drift back to the broken combo) fixed it —
-`TypeOrmCoreModule dependencies initialized` and `/health` responds normally. Revisit the pin
-once a newer `@nestjs/typeorm` release exists and confirms compatibility with current
-`@nestjs/core`.
+either. Bisecting versions was what worked — first pinned down to `11.0.1`, which fixed boot
+but (found later via `pnpm audit`, see `security.md` A06) carries a moderate injection
+vulnerability patched in `11.1.18`. Re-bisected: `11.1.18` boots cleanly (the `ModuleRef`
+regression was introduced somewhere between `11.1.18` and `11.1.28`, not present from the
+start of the `11.1.x` line) **and** is patched — so `11.1.18` is the actual target, not
+`11.0.1`. Pinned exact (`--save-exact`, no `^`) so a routine install can't silently drift back
+into either the broken or the vulnerable combo. Revisit once a newer `@nestjs/typeorm` release
+exists and confirms compatibility with current `@nestjs/core`.
