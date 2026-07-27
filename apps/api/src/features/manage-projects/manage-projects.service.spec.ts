@@ -1,8 +1,8 @@
 import { Test } from '@nestjs/testing';
-import { ManageProjectsService } from './manage-projects.service';
 import { getRepositoryToken } from '@nestjs/typeorm';
-import { ProjectEntity } from '@/entities/project/infrastructure/project.entity';
 import { NotFoundException } from '@nestjs/common';
+import { ManageProjectsService } from './manage-projects.service';
+import { ProjectEntity } from '@/entities/project/infrastructure/project.entity';
 
 function createMockRepository() {
   return {
@@ -20,7 +20,6 @@ function createMockRepository() {
 
 describe('ManageProjectsService', () => {
   let service: ManageProjectsService;
-
   let repository: ReturnType<typeof createMockRepository>;
 
   beforeEach(async () => {
@@ -29,10 +28,7 @@ describe('ManageProjectsService', () => {
     const module = await Test.createTestingModule({
       providers: [
         ManageProjectsService,
-        {
-          provide: getRepositoryToken(ProjectEntity),
-          useValue: repository,
-        },
+        { provide: getRepositoryToken(ProjectEntity), useValue: repository },
       ],
     }).compile();
 
@@ -52,9 +48,7 @@ describe('ManageProjectsService', () => {
 
       const result = await service.create({ name: 'Test' });
 
-      const savedArg = repository.save.mock.calls[0][0] as {
-        apiKeyHash: string;
-      };
+      const savedArg = repository.save.mock.calls[0][0];
       expect(savedArg.apiKeyHash).toEqual(expect.any(String));
       expect(savedArg.apiKeyHash).not.toEqual(result.apiKey);
       expect(result).not.toHaveProperty('apiKeyHash');
