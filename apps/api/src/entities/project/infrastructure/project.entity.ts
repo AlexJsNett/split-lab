@@ -7,5 +7,5 @@ export class ProjectEntity {
   @Column()
   name: string;
   @Column({ unique: true })
-  apiKey: string;
+  apiKeyHash: string;
 }

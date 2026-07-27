@@ -37,6 +37,13 @@ pnpm exec turbo run test --filter=@split-lab/api
 
 **Requirements:** Node.js 20+, Docker (Postgres/Redis/RabbitMQ from M2 onward).
 
+Another pnpm-vs-npm gotcha, for any script that takes extra CLI args (e.g. `apps/api`'s
+`migration:generate <name>`): npm swallows a `--` separator before forwarding args to the
+script, pnpm forwards it **literally** as an extra argument — which breaks yargs-based CLIs
+(like TypeORM's) that don't expect a bare `--` in their argv. Fix: don't use `--` with pnpm,
+pass the extra args directly — `pnpm run migration:generate src/migrations/Name`, not
+`pnpm run migration:generate -- src/migrations/Name`.
+
 Package name is `@split-lab/api` (from its `package.json` `name` field), `web` for the
 frontend — both used with turbo's `--filter`.
 

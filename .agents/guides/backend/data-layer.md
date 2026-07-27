@@ -34,7 +34,7 @@ fixed by adding a `"ts-node": { "require": ["tsconfig-paths/register"] }` block 
 `tsconfig.json`, so this applies to any file the CLI touches, not just `data-source.ts`).
 
 Scripts (`apps/api/package.json`):
-- `pnpm run migration:generate -- src/migrations/<Name>` — diffs entities against the actual
+- `pnpm run migration:generate src/migrations/<Name>` — diffs entities against the actual
   DB schema, writes the SQL to a new file. Doesn't touch the database.
 - `pnpm run migration:run` — applies pending migrations, in order, tracked in a `migrations`
   table TypeORM creates for itself (so re-running is a no-op for already-applied ones).
