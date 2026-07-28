@@ -7,6 +7,7 @@ import { ProjectEntity } from '@/entities/project/infrastructure/project.entity'
 import { FeatureFlagModule } from '@/entities/feature-flag/feature-flag.module';
 import { FeatureFlagEntity } from '@/entities/feature-flag/infrastructure/feature-flag.entity';
 import { ManageProjectsModule } from '@/features/manage-projects/manage-projects.module';
+import { ManageFlagsModule } from '@/features/manage-flags/manage-flags.module';
 
 @Module({
   imports: [
@@ -27,6 +28,7 @@ import { ManageProjectsModule } from '@/features/manage-projects/manage-projects
     ProjectModule,
     FeatureFlagModule,
     ManageProjectsModule,
+    ManageFlagsModule,
   ],
   controllers: [HealthController],
 })

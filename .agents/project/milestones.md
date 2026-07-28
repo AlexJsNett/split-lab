@@ -10,7 +10,7 @@ planning the next one or checking what's still ahead.
       dev script with hot reload. Wire `dev:api` at the root to run it.
 - [x] **M2 — Data layer**: Docker Compose with a Postgres container, TypeORM connected,
       entities for `Project` and `FeatureFlag`, migrations (not `synchronize: true`).
-- [ ] **M3 — Projects & Flags CRUD**: NestJS controllers/services/DTOs, `class-validator`
+- [x] **M3 — Projects & Flags CRUD**: NestJS controllers/services/DTOs, `class-validator`
       input validation, meaningful error responses (RESTful conventions — status codes,
       resource-oriented routes).
 - [ ] **M4 — Experiments & assignment**: experiments + variants CRUD, the deterministic

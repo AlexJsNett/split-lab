@@ -4,26 +4,31 @@ import { NotFoundException } from '@nestjs/common';
 import { ManageProjectsService } from './manage-projects.service';
 import { ProjectEntity } from '@/entities/project/infrastructure/project.entity';
 
-function createMockRepository() {
-  return {
-    create: jest.fn<Partial<ProjectEntity>, [Partial<ProjectEntity>]>(),
-    save: jest.fn<Promise<ProjectEntity>, [Partial<ProjectEntity>]>(),
-    find: jest.fn<Promise<ProjectEntity[]>, []>(),
-    findOneBy: jest.fn<Promise<ProjectEntity | null>, [{ id: string }]>(),
-    preload: jest.fn<
-      Promise<ProjectEntity | undefined>,
-      [Partial<ProjectEntity> & { id: string }]
-    >(),
-    delete: jest.fn<Promise<{ affected: number }>, [{ id: string }]>(),
-  };
-}
+type MockProjectRepository = {
+  create: jest.Mock<Partial<ProjectEntity>, [Partial<ProjectEntity>]>;
+  save: jest.Mock<Promise<ProjectEntity>, [Partial<ProjectEntity>]>;
+  find: jest.Mock<Promise<ProjectEntity[]>, []>;
+  findOneBy: jest.Mock<Promise<ProjectEntity | null>, [{ id: string }]>;
+  preload: jest.Mock<
+    Promise<ProjectEntity | undefined>,
+    [Partial<ProjectEntity> & { id: string }]
+  >;
+  delete: jest.Mock<Promise<{ affected: number }>, [{ id: string }]>;
+};
 
 describe('ManageProjectsService', () => {
   let service: ManageProjectsService;
-  let repository: ReturnType<typeof createMockRepository>;
+  let repository: MockProjectRepository;
 
   beforeEach(async () => {
-    repository = createMockRepository();
+    repository = {
+      create: jest.fn() as MockProjectRepository['create'],
+      save: jest.fn() as MockProjectRepository['save'],
+      find: jest.fn() as MockProjectRepository['find'],
+      findOneBy: jest.fn() as MockProjectRepository['findOneBy'],
+      preload: jest.fn() as MockProjectRepository['preload'],
+      delete: jest.fn() as MockProjectRepository['delete'],
+    };
 
     const module = await Test.createTestingModule({
       providers: [
