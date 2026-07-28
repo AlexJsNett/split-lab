@@ -6,6 +6,7 @@ import {
   HttpCode,
   HttpStatus,
   Param,
+  ParseUUIDPipe,
   Patch,
   Post,
 } from '@nestjs/common';
@@ -19,26 +20,29 @@ export class ManageFlagsController {
 
   @Post()
   create(
-    @Param('projectId') projectId: string,
+    @Param('projectId', ParseUUIDPipe) projectId: string,
     @Body() dto: CreateFeatureFlagDto,
   ) {
     return this.manageFlagsService.create(projectId, dto);
   }
 
   @Get()
-  findAll(@Param('projectId') projectId: string) {
+  findAll(@Param('projectId', ParseUUIDPipe) projectId: string) {
     return this.manageFlagsService.findAll(projectId);
   }
 
   @Get(':id')
-  findOne(@Param('projectId') projectId: string, @Param('id') id: string) {
+  findOne(
+    @Param('projectId', ParseUUIDPipe) projectId: string,
+    @Param('id', ParseUUIDPipe) id: string,
+  ) {
     return this.manageFlagsService.findOne(projectId, id);
   }
 
   @Patch(':id')
   update(
-    @Param('projectId') projectId: string,
-    @Param('id') id: string,
+    @Param('projectId', ParseUUIDPipe) projectId: string,
+    @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateFeatureFlagDto,
   ) {
     return this.manageFlagsService.update(projectId, id, dto);
@@ -46,7 +50,10 @@ export class ManageFlagsController {
 
   @Delete(':id')
   @HttpCode(HttpStatus.NO_CONTENT)
-  remove(@Param('projectId') projectId: string, @Param('id') id: string) {
+  remove(
+    @Param('projectId', ParseUUIDPipe) projectId: string,
+    @Param('id', ParseUUIDPipe) id: string,
+  ) {
     return this.manageFlagsService.remove(projectId, id);
   }
 }
