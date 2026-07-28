@@ -6,6 +6,12 @@ import { ProjectModule } from '@/entities/project/project.module';
 import { ProjectEntity } from '@/entities/project/infrastructure/project.entity';
 import { FeatureFlagModule } from '@/entities/feature-flag/feature-flag.module';
 import { FeatureFlagEntity } from '@/entities/feature-flag/infrastructure/feature-flag.entity';
+import { ExperimentModule } from '@/entities/experiment/experiment.module';
+import { ExperimentEntity } from '@/entities/experiment/infrastructure/experiment.entity';
+import { VariantModule } from '@/entities/variant/variant.module';
+import { VariantEntity } from '@/entities/variant/infrastructure/variant.entity';
+import { EventModule } from '@/entities/event/event.module';
+import { EventEntity } from '@/entities/event/infrastructure/event.entity';
 import { ManageProjectsModule } from '@/features/manage-projects/manage-projects.module';
 import { ManageFlagsModule } from '@/features/manage-flags/manage-flags.module';
 
@@ -21,12 +27,21 @@ import { ManageFlagsModule } from '@/features/manage-flags/manage-flags.module';
         username: config.get('DB_USER'),
         password: config.get('DB_PASSWORD'),
         database: config.get('DB_NAME'),
-        entities: [ProjectEntity, FeatureFlagEntity],
+        entities: [
+          ProjectEntity,
+          FeatureFlagEntity,
+          ExperimentEntity,
+          VariantEntity,
+          EventEntity,
+        ],
         synchronize: false,
       }),
     }),
     ProjectModule,
     FeatureFlagModule,
+    ExperimentModule,
+    VariantModule,
+    EventModule,
     ManageProjectsModule,
     ManageFlagsModule,
   ],

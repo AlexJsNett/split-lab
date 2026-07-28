@@ -58,10 +58,35 @@ class never knows or cares how `AppService` is built internally — only its pub
    `@Injectable()`) on purpose, so business rules aren't entangled with Nest's DI machinery;
    `infrastructure/` holds the real providers Nest actually constructs and injects.
 
+## Module `imports`/`exports` in practice (TypeOrmModule.forFeature)
+
+Every `entities/<noun>/<noun>.module.ts` in this repo looks like:
+
+```ts
+@Module({
+  imports: [TypeOrmModule.forFeature([ExperimentEntity])],
+  exports: [TypeOrmModule],
+})
+export class ExperimentModule {}
+```
+
+`forFeature([X])` is different from the `forRootAsync(...)` call in `AppModule` — `forRootAsync`
+configures the actual Postgres *connection* once, globally. `forFeature` says "given that
+connection, register a `Repository<X>` as a provider inside this module" — one call per entity.
+
+Providers added via `imports` are **private to the module that imported them** by default —
+importing `ExperimentModule` elsewhere does not automatically expose `Repository<ExperimentEntity>`
+to the importer. `ExperimentModule` itself has no controller/service — its only job is to make
+DB access to that table available to *other* modules — so it must `export: [TypeOrmModule]` to
+pass that repository provider along. Concretely: `ManageProjectsModule` does
+`imports: [ProjectModule]`, and only because `ProjectModule` exports `TypeOrmModule` can
+`ManageProjectsService` successfully `@InjectRepository(ProjectEntity)` in its constructor.
+Forgetting the `exports` line produces the same `UnknownDependenciesException` seen earlier in
+M2 — different root cause (visibility, not a version mismatch), same symptom.
+
 ## Terms to fill in as they come up
 
 - `@Inject()` + injection tokens — needed once dependencies are expressed as interfaces
   (no runtime type to reflect on), lands around M2-M3.
 - Guards / Pipes / Interceptors — same decorator+metadata mechanism, different hook points
   in the request lifecycle. Fill in once M7 (auth guard) lands.
-- Module `imports`/`exports` in practice, once there's more than one module (M3 onward).
