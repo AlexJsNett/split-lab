@@ -17,6 +17,8 @@ Technical requirements:
 - Experience with Docker.
 - Experience with Redis, MongoDB, or Elasticsearch.
 - Understanding of microservice architecture.
+- Experience with Prisma (seen alongside NestJS/PostgreSQL in a CRM/ERP-focused vacancy;
+  React/TypeScript/Vite frontend, 3+ years commercial experience required).
 
 Доповнення (укр.):
 - 2.5+ роки з Node.js (TypeScript)

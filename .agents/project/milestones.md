@@ -17,6 +17,17 @@ planning the next one or checking what's still ahead.
       assignment endpoint (`GET /experiments/:id/assign?userId=`), log an exposure event
       on assignment. Apply SOLID where it's actually warranted (e.g. an `AssignmentService`
       that's easy to unit test in isolation) — don't force patterns where they don't fit.
+- [ ] **Stretch — Prisma exposure (after M4, before M5)**: real vacancies ask for Prisma
+      alongside NestJS/PostgreSQL (see `target-stack.md`), but split-lab is already committed
+      to TypeORM (4 entities deep) — full rewrite/parallel-ORM abstraction across the whole
+      app is over-engineering for no real requirement. Bounded version instead: pick ONE
+      entity (`Project`), define a `ProjectRepositoryPort` interface in `domain/`, implement
+      it twice — `TypeOrmProjectRepository` (already have the logic, just reshape it) and a
+      new `PrismaProjectRepository` (separate Prisma schema/client, scoped to this one
+      table) — wire whichever via `useClass` in the module. Teaches Dependency
+      Inversion/Ports & Adapters concretely (a real SOLID principle, also on the target
+      list) AND gives real Prisma hands-on time, without touching Experiment/Variant/Event.
+      Keep or delete the exercise afterward — not required to stay wired into the app.
 - [ ] **M5 — Conversion tracking & results**: `POST /events` for conversions, an aggregation
       endpoint that returns per-variant exposure count, conversion count, conversion rate.
 - [ ] **M6 — Frontend wired to the real API**: replace the Next.js boilerplate with a

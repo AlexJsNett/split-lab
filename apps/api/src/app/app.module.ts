@@ -15,6 +15,7 @@ import { EventEntity } from '@/entities/event/infrastructure/event.entity';
 import { ManageProjectsModule } from '@/features/manage-projects/manage-projects.module';
 import { ManageFlagsModule } from '@/features/manage-flags/manage-flags.module';
 import { ManageVariantsModule } from '@/features/manage-variants/manage-variants.module';
+import { ManageExperimentsModule } from '@/features/manage-experiments/manage-experiments.module';
 
 @Module({
   imports: [
@@ -46,6 +47,7 @@ import { ManageVariantsModule } from '@/features/manage-variants/manage-variants
     ManageProjectsModule,
     ManageFlagsModule,
     ManageVariantsModule,
+    ManageExperimentsModule,
   ],
   controllers: [HealthController],
 })
