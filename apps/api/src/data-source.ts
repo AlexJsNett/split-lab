@@ -1,5 +1,7 @@
-import 'dotenv/config';
+import { config } from 'dotenv';
 import { DataSource } from 'typeorm';
+
+config({ path: process.env.NODE_ENV === 'test' ? '.env.test' : '.env' });
 import { ProjectEntity } from './entities/project/infrastructure/project.entity';
 import { FeatureFlagEntity } from './entities/feature-flag/infrastructure/feature-flag.entity';
 import { ExperimentEntity } from './entities/experiment/infrastructure/experiment.entity';

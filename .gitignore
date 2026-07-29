@@ -5,6 +5,7 @@ build/
 coverage/
 *.env
 .env
+.env.test
 !.env.example
 .DS_Store
 dev.db
