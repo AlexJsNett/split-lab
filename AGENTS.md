@@ -15,7 +15,7 @@ install — see `pnpm-workspace.yaml`'s `allowBuilds` note below).
 pnpm install
 
 # Development (root-only script names, no ambiguity with workspace scripts)
-pnpm dev:web              # Next.js dev server (apps/web)
+pnpm dev:web              # Angular dev server (apps/web)
 pnpm dev:api              # NestJS dev server (apps/api)
 
 # Code quality — runs across every package that has the script, cached, skips the rest
@@ -76,23 +76,19 @@ Monorepo, npm workspaces, one root git repo.
 
 | Package    | What                                                              | Status                    |
 | ---------- | ------------------------------------------------------------------ | -------------------------- |
-| `apps/web` | Next.js (App Router, TS) + Tailwind + shadcn/ui + React Query — UI only, no DB/logic | scaffolded (boilerplate)  |
-| `apps/api` | NestJS — all domain logic, DB, auth, queues                         | not started (M1)           |
+| `apps/web` | Angular (standalone components, TS, built-in SSR) — UI only, no DB/logic | scaffolded (boilerplate)  |
+| `apps/api` | NestJS — all domain logic, DB, auth, queues                         | M4 in progress (Projects/Flags/Variants/Experiments CRUD done) |
 
 Import boundary: `apps/web` talks to `apps/api` only over HTTP (fetch calls to REST
 endpoints). It never imports backend code, never touches the DB directly.
 
 ### apps/web tooling
 
-- **shadcn/ui** on top of Tailwind — components get added on demand with
-  `npx shadcn@latest add <component>` (writes into `src/components/ui/`), not hand-rolled.
-- **React Query** (`@tanstack/react-query`) for all server state — every read from `apps/api`
-  goes through a query hook, every write through a mutation hook. Not Redux: there's no
-  significant client-only state here, this app is a dashboard over REST resources, and
-  Query already handles caching/invalidation/refetch for exactly that shape. Revisit only if
-  real cross-cutting client state shows up that Query genuinely can't model (rare for this
-  app's scope). Provider is wired in `src/app/providers.tsx` — already in place, M6 just
-  adds real query hooks against it.
+Scaffolded via `ng new --ssr --style=css --routing` (Angular 22, standalone components — no
+`NgModule` boilerplate). No styling/state-management library picked yet — plain CSS for now,
+concrete choices (a component library, how server state gets fetched/cached — Angular's
+`HttpClient` + signals is the native fit, no React-Query-equivalent forced) deferred to M6
+when there are real screens to build against. Don't add either speculatively before M6.
 
 ### apps/api (target shape, fills in per milestone)
 

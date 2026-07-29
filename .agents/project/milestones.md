@@ -34,9 +34,9 @@ planning the next one or checking what's still ahead.
       wired into the app.
 - [ ] **M5 — Conversion tracking & results**: `POST /events` for conversions, an aggregation
       endpoint that returns per-variant exposure count, conversion count, conversion rate.
-- [ ] **M6 — Frontend wired to the real API**: replace the Next.js boilerplate with a
+- [ ] **M6 — Frontend wired to the real API**: replace the Angular boilerplate with a
       dashboard that lists projects/flags/experiments and shows results. Frontend stays
-      dumb — no logic Next.js doesn't need.
+      dumb — no logic beyond what the dashboard actually needs.
 - [ ] **M7 — Auth**: API key guard in Nest (the `Project.apiKey` field already fits this),
       reject unauthenticated requests.
 - [ ] **M8 — Tests**: Jest unit tests, starting with the assignment/bucketing logic since
