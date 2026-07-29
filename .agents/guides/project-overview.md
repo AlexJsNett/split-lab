@@ -20,7 +20,7 @@ split-lab/
 - **`apps/api`** — NestJS API server. Domain logic, DB, auth, queues. Tech choices, fixed by
   the target stack (not a free pick):
   - Framework: **NestJS** (modules/controllers/providers/DI — this structure is the point)
-  - ORM: **TypeORM**
+  - ORM: **Drizzle**
   - Primary DB: **PostgreSQL**
   - Cache / queue backing: **Redis**
   - Message broker: **RabbitMQ** (BullMQ-on-Redis first as a warm-up, then RabbitMQ for the
@@ -45,11 +45,18 @@ variant weights.
 ## Status
 
 - [x] M1 — NestJS skeleton done (`GET /health`, `dev:api` wired).
-- [x] M2 — Data layer done. Postgres in Docker, TypeORM connected, `Project`/`FeatureFlag`
-      entities + first migration (`InitSchema`) applied.
+- [x] M2 — Data layer done. Postgres in Docker, `Project`/`FeatureFlag`/`Experiment`/
+      `Variant`/`Event` schemas + migrations applied.
 - [x] M3 — Projects & Flags CRUD done. `Project` (hashed `apiKey`) and `FeatureFlag`
       (nested under `/projects/:projectId/flags`, scoped queries to prevent IDOR) CRUD,
       full unit test coverage on both services.
-- [ ] M4 — Experiments & assignment — current. See `.agents/project/milestones.md` for M5+.
+- [ ] M4 — Experiments & assignment — current. `Experiment`/`Variant` CRUD done (same
+      scoped-query pattern, plus a `draft`→`running` transition that validates variant
+      weights sum to 100); the deterministic assignment endpoint is next. See
+      `.agents/project/milestones.md` for M5+.
+- Data layer switched from TypeORM to Drizzle mid-M4 (developer's choice — see
+  `milestones.md`'s "Stretch — Prisma exposure" entry for the reasoning trail). All 4
+  services rewritten on the new query client, same route/response shape, no API contract
+  changes for consumers.
 - This section should be updated (which milestone is current, what changed structurally)
   whenever a milestone that touches architecture lands — not left stale.

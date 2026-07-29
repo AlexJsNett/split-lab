@@ -58,35 +58,63 @@ class never knows or cares how `AppService` is built internally — only its pub
    `@Injectable()`) on purpose, so business rules aren't entangled with Nest's DI machinery;
    `infrastructure/` holds the real providers Nest actually constructs and injects.
 
-## Module `imports`/`exports` in practice (TypeOrmModule.forFeature)
+## `@Inject()` + custom provider tokens (the `DRIZZLE` pattern)
 
-Every `entities/<noun>/<noun>.module.ts` in this repo looks like:
+`@InjectRepository(XEntity)` (TypeORM) worked because `XEntity` is a real class — decorator
+metadata can reflect a class reference at runtime, so Nest's DI can use the class itself as
+the lookup key. Drizzle has no such class: the DB client is a plain object returned by
+`drizzle(pool, { schema })`, and a `pgTable(...)` schema export is a plain const, not something
+`emitDecoratorMetadata` can turn into a lookup key. This is exactly the case the "Terms to fill
+in" note above used to flag: *"needed once dependencies are expressed as interfaces (no
+runtime type to reflect on)"* — that's now.
+
+The fix is a custom provider token — any unique value (a string, or here a `Symbol`) that
+stands in for "the thing this provider constructs," registered explicitly instead of relying
+on reflected class metadata:
 
 ```ts
+// src/db/drizzle.module.ts
+export const DRIZZLE = Symbol('DRIZZLE');
+
+@Global()
 @Module({
-  imports: [TypeOrmModule.forFeature([ExperimentEntity])],
-  exports: [TypeOrmModule],
+  providers: [
+    {
+      provide: DRIZZLE,
+      inject: [ConfigService],
+      useFactory: (config: ConfigService) => drizzle(pool, { schema }),
+    },
+  ],
+  exports: [DRIZZLE],
 })
-export class ExperimentModule {}
+export class DrizzleModule {}
 ```
 
-`forFeature([X])` is different from the `forRootAsync(...)` call in `AppModule` — `forRootAsync`
-configures the actual Postgres *connection* once, globally. `forFeature` says "given that
-connection, register a `Repository<X>` as a provider inside this module" — one call per entity.
+Consuming it needs `@Inject(DRIZZLE)` instead of a bare constructor-parameter type, because
+there's no class for Nest to reflect — the token has to be named explicitly at the injection
+site too:
 
-Providers added via `imports` are **private to the module that imported them** by default —
-importing `ExperimentModule` elsewhere does not automatically expose `Repository<ExperimentEntity>`
-to the importer. `ExperimentModule` itself has no controller/service — its only job is to make
-DB access to that table available to *other* modules — so it must `export: [TypeOrmModule]` to
-pass that repository provider along. Concretely: `ManageProjectsModule` does
-`imports: [ProjectModule]`, and only because `ProjectModule` exports `TypeOrmModule` can
-`ManageProjectsService` successfully `@InjectRepository(ProjectEntity)` in its constructor.
-Forgetting the `exports` line produces the same `UnknownDependenciesException` seen earlier in
-M2 — different root cause (visibility, not a version mismatch), same symptom.
+```ts
+constructor(@Inject(DRIZZLE) private readonly db: NodePgDatabase<typeof schema>) {}
+```
+
+## Module `imports`/`exports` in practice (`@Global()` modules)
+
+There's no `forFeature`-per-entity call anymore — Drizzle has no per-table repository object
+to register, just the one shared client. `DrizzleModule` is marked `@Global()` and imported
+once, in `AppModule`. A normal (non-global) module's providers are **private to the module
+that imported them** by default — that's still true here, and is the same visibility rule that
+mattered for the old per-entity `TypeOrmModule.forFeature` setup. `@Global()` is the escape
+hatch: mark a module global, import it once anywhere in the graph (root is conventional), and
+every other module can inject its exported providers without importing it themselves. Right
+tool here specifically because *every* feature module needs DB access — the per-entity
+`forFeature` approach made sense when each module only needed one specific repository; a
+single shared DB client used everywhere is exactly the "used almost universally" case
+`@Global()` exists for. Overusing `@Global()` for things that aren't truly cross-cutting would
+undo the "module boundaries are enforced" property described above — this is the one exception,
+not the default.
 
 ## Terms to fill in as they come up
 
-- `@Inject()` + injection tokens — needed once dependencies are expressed as interfaces
-  (no runtime type to reflect on), lands around M2-M3.
 - Guards / Pipes / Interceptors — same decorator+metadata mechanism, different hook points
   in the request lifecycle. Fill in once M7 (auth guard) lands.

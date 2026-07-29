@@ -8,8 +8,8 @@ planning the next one or checking what's still ahead.
 
 - [x] **M1 — NestJS skeleton**: `nest new`, `GET /health` returns 200, TypeScript configured,
       dev script with hot reload. Wire `dev:api` at the root to run it.
-- [x] **M2 — Data layer**: Docker Compose with a Postgres container, TypeORM connected,
-      entities for `Project` and `FeatureFlag`, migrations (not `synchronize: true`).
+- [x] **M2 — Data layer**: Docker Compose with a Postgres container, Drizzle connected,
+      schemas for `Project` and `FeatureFlag`, migrations (not `drizzle-kit push`).
 - [x] **M3 — Projects & Flags CRUD**: NestJS controllers/services/DTOs, `class-validator`
       input validation, meaningful error responses (RESTful conventions — status codes,
       resource-oriented routes).
@@ -18,16 +18,20 @@ planning the next one or checking what's still ahead.
       on assignment. Apply SOLID where it's actually warranted (e.g. an `AssignmentService`
       that's easy to unit test in isolation) — don't force patterns where they don't fit.
 - [ ] **Stretch — Prisma exposure (after M4, before M5)**: real vacancies ask for Prisma
-      alongside NestJS/PostgreSQL (see `target-stack.md`), but split-lab is already committed
-      to TypeORM (4 entities deep) — full rewrite/parallel-ORM abstraction across the whole
-      app is over-engineering for no real requirement. Bounded version instead: pick ONE
-      entity (`Project`), define a `ProjectRepositoryPort` interface in `domain/`, implement
-      it twice — `TypeOrmProjectRepository` (already have the logic, just reshape it) and a
+      alongside NestJS/PostgreSQL (see `target-stack.md`). split-lab moved off TypeORM onto
+      Drizzle mid-M4 (developer's call, after checking real 2026 job-market data on
+      TypeORM/Prisma/Drizzle — Drizzle is gaining fastest for new projects, TypeORM stays
+      correct specifically for NestJS-enterprise, Prisma remains the most-adopted overall).
+      Full rewrite onto a third ORM for one job-posting mention is still over-engineering —
+      the bounded version below stands regardless of which ORM is primary. Pick ONE entity
+      (`Project`), define a `ProjectRepositoryPort` interface in `domain/`, implement it
+      twice — `DrizzleProjectRepository` (already have the logic, just reshape it) and a
       new `PrismaProjectRepository` (separate Prisma schema/client, scoped to this one
-      table) — wire whichever via `useClass` in the module. Teaches Dependency
-      Inversion/Ports & Adapters concretely (a real SOLID principle, also on the target
-      list) AND gives real Prisma hands-on time, without touching Experiment/Variant/Event.
-      Keep or delete the exercise afterward — not required to stay wired into the app.
+      table) — wire whichever via `useClass`/a custom provider token in the module. Teaches
+      Dependency Inversion/Ports & Adapters concretely (a real SOLID principle, also on the
+      target list) AND gives real Prisma hands-on time, without touching
+      Experiment/Variant/Event. Keep or delete the exercise afterward — not required to stay
+      wired into the app.
 - [ ] **M5 — Conversion tracking & results**: `POST /events` for conversions, an aggregation
       endpoint that returns per-variant exposure count, conversion count, conversion rate.
 - [ ] **M6 — Frontend wired to the real API**: replace the Next.js boilerplate with a

@@ -12,7 +12,7 @@ architecture, clean architecture — translated from frontend-FSD to a NestJS ba
   `features/` = business actions/use-cases that use one or more entities. No `pages/` or
   `widgets/` layer — those are frontend-only, meaningless on a backend.
 - **Clean-architecture-lite**: inside a slice, `domain/` holds framework-free types and
-  rules (no `@Injectable()`, no TypeORM imports); `infrastructure/` holds the NestJS/TypeORM
+  rules (no `@Injectable()`, no Drizzle imports); `infrastructure/` holds the NestJS/Drizzle
   wiring that implements/uses those types. Don't take this further than that for now — full
   ports-and-adapters with repository interfaces everywhere is more ceremony than a
   single-team project this size needs yet. Revisit if `apps/api` grows past a few
@@ -34,7 +34,7 @@ apps/api/src/
   entities/
     project/
       domain/              # Project type/interface, no framework imports
-      infrastructure/       # TypeORM entity, repository
+      infrastructure/       # Drizzle schema (pgTable)
       project.module.ts
     feature-flag/
       domain/

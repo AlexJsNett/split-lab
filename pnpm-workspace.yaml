@@ -2,6 +2,7 @@ packages:
   - "apps/*"
 allowBuilds:
   '@nestjs/core': false
+  esbuild: true
   sharp: true
   unrs-resolver: true
 overrides:

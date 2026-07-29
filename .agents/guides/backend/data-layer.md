@@ -1,67 +1,85 @@
-# Back-end Data Layer (TypeORM/Postgres)
+# Back-end Data Layer (Drizzle/Postgres)
 
 ## Entity organization
 
 One folder per entity under `entities/<noun>/`, domain/infrastructure split (see
 `api-patterns.md`): `domain/<noun>.ts` is a plain TS interface (no framework imports —
-`Project`, `FeatureFlag`), `infrastructure/<noun>.entity.ts` has the real `@Entity()` class
-with TypeORM decorators. Keep the two in sync manually — infrastructure is the DB-shape
-implementation of what domain declares; a mismatch (e.g. `enabled: boolean` in domain but
-`enabled: string` in the entity) defeats the whole point of the split and TypeScript won't
-catch it for you since they're structurally unrelated types.
+`Project`, `FeatureFlag`), `infrastructure/<noun>.schema.ts` has the real Drizzle table
+definition — a plain exported `pgTable(...)` const, no class, no decorators. Keep the two in
+sync manually — infrastructure is the DB-shape implementation of what domain declares; a
+mismatch (e.g. `enabled: boolean` in domain but a `varchar` column in the schema) defeats the
+whole point of the split and TypeScript won't catch it for you since they're structurally
+unrelated declarations.
 
-Relations: both the plain FK column (`projectId: string`) and the relation object
-(`project: ProjectEntity` via `@ManyToOne` + `@JoinColumn({ name: 'projectId' })`) are
-declared. The plain column lets you filter/query without a join; the relation lets you
-`relations: ['project']` when you actually need the related row.
+Relations: the FK column declares its own reference inline —
+`projectId: uuid('projectId').notNull().references(() => projects.id)` — there's no separate
+relation object/property the way TypeORM's `@ManyToOne` + `@JoinColumn` needed two things
+(a column and a relation property). Drizzle only builds a joined relation when a query
+explicitly asks for one (via its `relations()` API or a manual `.leftJoin(...)`) — the schema
+alone just declares the foreign key constraint for the database and for query type-checking.
 
-Each entity's `<noun>.module.ts` registers its repository via
-`TypeOrmModule.forFeature([XEntity])` and re-exports `TypeOrmModule` so importing modules can
-`@InjectRepository(XEntity)` — `forFeature` is per-module ("I need this specific repository
-here"), distinct from the root `forRootAsync` in `app.module.ts` ("here's the DB connection
-for the whole app"). Every new entity needs adding in three places: its own module file, the
-`entities: [...]` array inside `app.module.ts`'s `TypeOrmModule.forRootAsync`, and the new
-module added to `app.module.ts`'s `imports`.
+There is no per-entity module and no `forFeature`-style repository registration. A single
+`DrizzleModule` (`src/db/drizzle.module.ts`), marked `@Global()`, provides one DB client under
+a `DRIZZLE` injection token — every service that needs data access just
+`@Inject(DRIZZLE) private readonly db: NodePgDatabase<typeof schema>` in its constructor and
+queries directly (`this.db.select().from(projects).where(...)`), no repository wrapper. A new
+entity needs adding in two places: its own `<noun>.schema.ts`, and re-exported from
+`src/db/schema.ts` (the barrel the `DrizzleModule` factory builds the typed client from).
 
 ## Migration workflow
 
-`src/data-source.ts` is a standalone TypeORM `DataSource` config, separate from the Nest
-`TypeOrmModule.forRootAsync` in `app.module.ts` — the TypeORM CLI runs outside Nest entirely
-and can't read Nest-shaped config, so it needs its own. Uses `dotenv/config` directly (Nest's
-`ConfigModule` isn't running here) and plain relative imports for entities (not the `@/` path
-alias — the CLI runs through `ts-node`, which doesn't resolve TS path aliases unless told to;
-fixed by adding a `"ts-node": { "require": ["tsconfig-paths/register"] }` block to
-`tsconfig.json`, so this applies to any file the CLI touches, not just `data-source.ts`).
+`drizzle.config.ts` (apps/api root) is drizzle-kit's own config — schema glob, output
+directory, DB credentials — separate from the Nest `DrizzleModule`, since drizzle-kit runs
+outside Nest entirely as its own CLI, same reason the old TypeORM CLI needed a standalone
+`data-source.ts`. Uses `dotenv`'s `config({ path: ... })` directly (Nest's `ConfigModule` isn't
+running here), switching to `.env.test` when `NODE_ENV=test` — same pattern as everywhere else
+env selection happens in this project.
 
 Scripts (`apps/api/package.json`):
-- `pnpm run migration:generate src/migrations/<Name>` — diffs entities against the actual
-  DB schema, writes the SQL to a new file. Doesn't touch the database.
-- `pnpm run migration:run` — applies pending migrations, in order, tracked in a `migrations`
-  table TypeORM creates for itself (so re-running is a no-op for already-applied ones).
-- `pnpm run migration:revert` — undoes the last applied migration via its `down()`.
+- `pnpm run migration:generate` — diffs the schema files (`src/entities/**/infrastructure/
+  *.schema.ts`) against the last-known snapshot, writes a new SQL file under `src/migrations/`.
+  Doesn't touch the database.
+- `pnpm run migration:run` — applies pending migrations to the dev DB.
+- `pnpm run migration:run:test` — the same, against `splitlab_test` (`NODE_ENV=test`).
+
+**Known gotcha:** `drizzle-kit migrate` (the CLI's own apply command) failed silently in this
+project's setup — no usable error, just a stuck spinner and a non-zero exit. Calling
+`drizzle-orm`'s `migrate()` function directly (same underlying mechanism, just not through the
+CLI wrapper) worked immediately with the identical config. `migration:run`/`migration:run:test`
+now run a small hand-written `src/db/migrate.ts` via `ts-node` instead of `drizzle-kit
+migrate` — `migration:generate` still uses the drizzle-kit CLI since that command worked fine.
+Revisit if a `drizzle-kit` update fixes the CLI `migrate` path; no reason not to consolidate on
+the CLI once it actually works.
+
+There is no built-in down-migration/`migration:revert` — drizzle-kit only generates forward
+SQL from a schema diff. Accepted gap for this project's size; if a rollback is ever genuinely
+needed, hand-write a reverse SQL file.
 
 **Always read a generated migration file before running it** — `migration:generate` is a
 mechanical diff, not a judgment call; see the rename example below for exactly what it gets
 wrong by default.
 
-## Why migrations, not `synchronize: true`
+## Why migrations, not `drizzle-kit push`
 
-Concrete case: `feature_flags` has 10,000 real rows in production. The team renames
-`FeatureFlag.rolloutPercent` → `rolloutPct` in the entity, purely a naming cleanup.
+Drizzle has a `push` command (push the current schema straight to the DB, no migration file,
+no history) — it's Drizzle's equivalent of TypeORM's `synchronize: true`, and the same
+argument against `synchronize` applies to it. Concrete case: `feature_flags` has 10,000 real
+rows in production. The team renames `FeatureFlag.rolloutPercent` → `rolloutPct` in the schema,
+purely a naming cleanup.
 
-**With `synchronize: true`:**
+**With `drizzle-kit push`:**
 ```
-Entity change: rolloutPercent → rolloutPct
+Schema change: rolloutPercent → rolloutPct
         │
         ▼
-Deploy, app restarts
+Deploy, push runs against the live DB
         │
         ▼
-TypeORM diffs entity against live DB schema
+drizzle-kit diffs schema against live DB schema
         │
         ▼
-Sees "rolloutPercent" gone from the entity, "rolloutPct" is new —
-to TypeORM these are two unrelated columns, not a rename
+Sees "rolloutPercent" gone from the schema, "rolloutPct" is new —
+to drizzle-kit these are two unrelated columns, not a rename
         │
         ▼
 DROP COLUMN "rolloutPercent"      ← all 10,000 values gone
@@ -73,13 +91,13 @@ No confirmation, no review, no rollback — happened live in prod
 
 **With migrations:**
 ```
-Entity change: rolloutPercent → rolloutPct
+Schema change: rolloutPercent → rolloutPct
         │
         ▼
 pnpm run migration:generate
         │
         ▼
-TypeORM writes the SQL to a FILE — same naive DROP+ADD, but nothing
+drizzle-kit writes the SQL to a FILE — same naive DROP+ADD, but nothing
 has touched the real database yet
         │
         ▼
@@ -98,48 +116,24 @@ prod, in the same order, every time
 10,000 rows keep their real values; only the column name changed
 ```
 
-TypeORM is equally naive in both paths — it proposes the same destructive diff either way.
-The difference is entirely about *where* that mistake can be caught: `synchronize` applies it
-live, silently, with no chance to intervene; a migration is a text file on disk you can read,
-fix, and get reviewed before it ever touches real data. Bonus with migrations: every
-environment applies the identical, ordered set of files, so dev/staging/prod schemas can't
-drift apart the way independently-`synchronize`d local databases can.
+drizzle-kit is equally naive in both paths — it proposes the same destructive diff either way.
+The difference is entirely about *where* that mistake can be caught: `push` applies it live,
+silently, with no chance to intervene; a migration is a text file on disk you can read, fix,
+and get reviewed before it ever touches real data. Bonus with migrations: every environment
+applies the identical, ordered set of files, so dev/staging/prod schemas can't drift apart the
+way independently-`push`ed local databases can.
 
-## TODO — hands-on exercise: watch `synchronize: true` actually destroy data
+## TODO — hands-on exercise: watch `drizzle-kit push` actually destroy data
 
-Do this once M3 (CRUD) exists and there's real seed data (a handful of `Project`/`FeatureFlag`
-rows created through the actual API, not just the migration). The write-up above is the
-explanation; this is doing it with your own hands so it's not just theory:
+Do this once there's real seed data (a handful of `Project`/`FeatureFlag` rows created through
+the actual API, not just a migration). The write-up above is the explanation; this is doing it
+with your own hands so it's not just theory:
 
-1. Seed a few rows via the M3 endpoints, note down real `rolloutPercent` values.
-2. On a throwaway branch: rename `rolloutPercent` → `rolloutPct` in `FeatureFlagEntity`, flip
-   `synchronize: true` temporarily in `data-source.ts`/`app.module.ts`, restart the app.
+1. Seed a few rows via the API, note down real `rolloutPercent` values.
+2. On a throwaway branch: rename `rolloutPercent` → `rolloutPct` in `feature-flag.schema.ts`,
+   run `npx drizzle-kit push` against the dev DB.
 3. Check the table — confirm the values are actually gone (`rolloutPct` reset to `0`).
 4. Revert, do it the real way instead: `migration:generate`, read the generated file, hand-edit
    the `DROP`+`ADD` into a `RENAME COLUMN`, `migration:run`, confirm the values survived.
 
 Delete this TODO once done — the point is doing it once, not keeping it as a checklist.
-
-## Known gotcha: pin `@nestjs/core`/`common`/`platform-express`/`testing` to `11.1.18`
-
-`npm install` on a fresh M2 setup resolves `@nestjs/core` to its newest version (`11.1.28` at
-the time this was hit), but `@nestjs/typeorm@11.0.3` (itself the newest available) breaks
-against it — app boot throws:
-
-```
-UnknownDependenciesException: Nest can't resolve dependencies of the TypeOrmCoreModule
-(TypeOrmModuleOptions, ?). Please make sure that the argument ModuleRef at index [1] is
-available in the TypeOrmCoreModule module.
-```
-
-Not a config mistake — `ModuleRef` is a Nest-internal class that's normally always injectable
-without any explicit import. Confirmed by directly resolving both packages' `require()` paths:
-they pointed at the exact same on-disk `@nestjs/core`, so it wasn't a duplicate-copy problem
-either. Bisecting versions was what worked — first pinned down to `11.0.1`, which fixed boot
-but (found later via `pnpm audit`, see `security.md` A06) carries a moderate injection
-vulnerability patched in `11.1.18`. Re-bisected: `11.1.18` boots cleanly (the `ModuleRef`
-regression was introduced somewhere between `11.1.18` and `11.1.28`, not present from the
-start of the `11.1.x` line) **and** is patched — so `11.1.18` is the actual target, not
-`11.0.1`. Pinned exact (`--save-exact`, no `^`) so a routine install can't silently drift back
-into either the broken or the vulnerable combo. Revisit once a newer `@nestjs/typeorm` release
-exists and confirms compatibility with current `@nestjs/core`.

@@ -29,8 +29,8 @@ Repo layout, `apps/api` folder architecture (FSD-inspired), and per-app tech sta
 - Full domain model + deterministic bucketing explanation: `.agents/guides/project-overview.md`
 - Full milestone list (M1–M16): `.agents/project/milestones.md`
 
-**Current milestone: M2 — Data layer** (Docker Compose Postgres, TypeORM, `Project`/
-`FeatureFlag` entities, migrations). Open `milestones.md` for what's after it.
+**Current milestone: M4 — Experiments & assignment** (Experiment/Variant CRUD done; the
+deterministic assignment endpoint is next). Open `milestones.md` for what's after it.
 
 ## Working agreement
 
@@ -40,7 +40,7 @@ Repo layout, `apps/api` folder architecture (FSD-inspired), and per-app tech sta
   specific pattern is usually done — just say so explicitly so Claude knows it's a
   deliberate exception, not the default mode.
 - **Teach, don't just direct — mandatory, not optional.** The developer has zero prior
-  experience with this entire stack (NestJS, TypeORM, Postgres, Docker, Redis, RabbitMQ —
+  experience with this entire stack (NestJS, Drizzle, Postgres, Docker, Redis, RabbitMQ —
   all of it, first time touching any of it). Every step handed over must come with *why*,
   not just *what* — never assume a step is "obvious" or skip the explanation to save time.
   Concrete conceptual explanations (DI, decorators, module boundaries, etc.) that come up

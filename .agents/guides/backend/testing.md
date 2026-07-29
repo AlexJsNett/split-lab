@@ -3,38 +3,57 @@
 100% coverage policy (see `AGENTS.md`) means tests land with every milestone, not deferred to
 M8 — M8 is "close any remaining gaps," not "write the first test."
 
-## Unit tests: service/logic classes, mocked repository
+## Unit tests: service/logic classes, mocked Drizzle client
 
-Convention established in `manage-projects.service.spec.ts` (M3): mock the TypeORM
-`Repository`, don't hit a real database. `Test.createTestingModule` builds a real Nest DI
-graph for the test, but with a fake repository swapped in:
+Convention established in `manage-projects.service.spec.ts` (rewritten for Drizzle): mock the
+whole `DRIZZLE`-provided DB client, don't hit a real database. `Test.createTestingModule`
+builds a real Nest DI graph for the test, but with a fake client swapped in under the same
+token the service actually injects:
 
 ```ts
 const module = await Test.createTestingModule({
   providers: [
     ManageProjectsService,
-    { provide: getRepositoryToken(ProjectEntity), useValue: repository },
+    { provide: DRIZZLE, useValue: db },
   ],
 }).compile();
 ```
 
-`getRepositoryToken(XEntity)` is the same DI token Nest uses internally for
-`@InjectRepository(XEntity)` — providing a plain object under that token makes the service
-think it received the real thing. The fake repository is a plain object of `jest.fn()`s (one
-per `Repository` method the service actually calls — `create`, `save`, `find`, `findOneBy`,
-`preload`, `delete`), programmed per-test via `mockResolvedValue`/`mockImplementation` to
-return whatever that specific test needs. Rebuilt fresh in `beforeEach` so one test can't leak
-state into the next.
+`db` is a plain object with `select`/`insert`/`update`/`delete` as `jest.fn()`s — but each of
+those isn't a single flat call the way `repository.findOneBy(...)` was. Drizzle's query
+builder is a *chain* (`db.select().from(table).where(cond)`), so the mock has to fake the
+whole chain shape, not just one function call. Per-test helpers build that chain fresh:
 
-This tests the service's *logic* (does it hash before saving, does it throw
-`NotFoundException` when the repository reports nothing found, does the response ever leak
-`apiKeyHash`) without depending on Postgres being up or caring what real SQL TypeORM would
-generate.
+```ts
+function mockSelectWhere(db: MockDb, resolvedRows: unknown[]) {
+  db.select.mockReturnValueOnce({
+    from: jest.fn().mockReturnValue({
+      where: jest.fn().mockResolvedValue(resolvedRows),
+    }),
+  });
+}
+```
+
+`.from()` returns an object whose `.where()` is the one that actually resolves — everything
+before the terminal link just has to return the next link in the chain
+(`mockReturnValue({...})`), only the terminal link resolves real data
+(`mockResolvedValue(resolvedRows)`). `insert`/`update`/`delete` follow the same idea with their
+own terminal link (usually `.returning()`). `mockReturnValueOnce` (not the plain `mockReturnValue`)
+matters when a single test triggers two sequential calls to the same method with different
+needed results — e.g. `assertProjectExists`'s existence check, then the real query — each
+configured independently, consumed in call order.
+
+This is bulkier boilerplate than the old `Repository` mocks — an accepted trade-off from
+moving off TypeORM's object-shaped repository onto Drizzle's chained query builder, not a
+regression in test quality. It still tests the exact same thing: the service's *logic* (does
+it hash before saving, does it throw `NotFoundException` when nothing came back, does the
+response ever leak `apiKeyHash`) without depending on Postgres being up or caring what real SQL
+Drizzle would generate.
 
 ## e2e tests: real app, real (but separate) database
 
 `test/*.e2e-spec.ts`, run via `pnpm run test:e2e` — boots the actual `AppModule` (real
-`TypeOrmModule.forRootAsync`, real Postgres in Docker) and hits routes through `supertest`.
+`DrizzleModule`, real Postgres in Docker) and hits routes through `supertest`.
 Used sparingly (per `AGENTS.md`'s testing policy, these complement rather than replace unit
 tests) — currently just the M1 health check. Expand as controllers land, one happy-path e2e
 per resource is enough; edge cases and branching belong in the unit tests above.
@@ -47,8 +66,8 @@ wired through `NODE_ENV`:
 - `apps/api/.env.test` — same host/port/creds as `.env`, `DB_NAME=splitlab_test` instead of
   `splitlab`. Gitignored (like `.env`), never committed.
 - `AppModule`'s `ConfigModule.forRoot` picks `.env.test` over `.env` when `NODE_ENV=test`.
-- `src/data-source.ts` (the standalone CLI DataSource) does the same, via `dotenv`'s `config({
-  path: ... })` instead of the bare `import 'dotenv/config'`.
+- `drizzle.config.ts` and `src/db/migrate.ts` (the standalone CLI-facing files) do the same,
+  via `dotenv`'s `config({ path: ... })`.
 - `pnpm run test:e2e` sets `NODE_ENV=test` before invoking Jest — this is the one thing that
   actually switches which database gets used; nothing else changes.
 

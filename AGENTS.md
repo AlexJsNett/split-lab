@@ -37,12 +37,10 @@ pnpm exec turbo run test --filter=@split-lab/api
 
 **Requirements:** Node.js 20+, Docker (Postgres/Redis/RabbitMQ from M2 onward).
 
-Another pnpm-vs-npm gotcha, for any script that takes extra CLI args (e.g. `apps/api`'s
-`migration:generate <name>`): npm swallows a `--` separator before forwarding args to the
-script, pnpm forwards it **literally** as an extra argument — which breaks yargs-based CLIs
-(like TypeORM's) that don't expect a bare `--` in their argv. Fix: don't use `--` with pnpm,
-pass the extra args directly — `pnpm run migration:generate src/migrations/Name`, not
-`pnpm run migration:generate -- src/migrations/Name`.
+Another pnpm-vs-npm gotcha, for any script that takes extra CLI args: npm swallows a `--`
+separator before forwarding args to the script, pnpm forwards it **literally** as an extra
+argument — which breaks yargs-based CLIs that don't expect a bare `--` in their argv. Fix:
+don't use `--` with pnpm, pass the extra args directly to whatever script needs them.
 
 Package name is `@split-lab/api` (from its `package.json` `name` field), `web` for the
 frontend — both used with turbo's `--filter`.
@@ -103,7 +101,7 @@ Nest tutorial layout. Full convention and rationale: `.agents/guides/backend/api
 — read it before scaffolding M1, it decides where files go from the start.
 
 - `entities/<noun>/` (domain + infrastructure) for things with a table behind them; `features/<verb>/` for use-cases that read/write them. No top-level `controllers/`/`services/`/`dto/` buckets.
-- TypeORM entities + migrations, no `synchronize: true` outside local scratch experiments.
+- Drizzle schemas + migrations, no `drizzle-kit push` outside local scratch experiments.
 - `class-validator` DTOs at the controller boundary — never trust raw request bodies past
   the DTO layer.
 - Async work (event ingestion) goes through a queue (BullMQ/Redis first, RabbitMQ once a
@@ -134,7 +132,7 @@ is the honest state, not a placeholder to ignore.
 - Project structure: `.agents/guides/project-overview.md`
 - NestJS core concepts (DI, decorators, modules — the "why"): `.agents/guides/backend/nestjs-concepts.md`
 - Back-end API patterns (NestJS/REST): `.agents/guides/backend/api-patterns.md`
-- Back-end data layer (TypeORM/Postgres): `.agents/guides/backend/data-layer.md`
+- Back-end data layer (Drizzle/Postgres): `.agents/guides/backend/data-layer.md`
 - Back-end testing (Jest): `.agents/guides/backend/testing.md`
 - Security (OWASP Top 10 mapped to this project's actual surface): `.agents/guides/backend/security.md`
 - Async processing & messaging (BullMQ/RabbitMQ): `.agents/guides/backend/messaging.md`
