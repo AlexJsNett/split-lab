@@ -43,6 +43,21 @@ Deterministic bucketing: same `userId` always maps to the same variant for a giv
 experiment — hash `experimentId:userId`, bucket = hash mod 100, compare against cumulative
 variant weights.
 
+**M4 assignment endpoint — concept note (pending implementation, explain when picked up)**:
+1. Key: `experimentId + ':' + userId` — separator matters, avoids collisions
+   (`"exp1"+"1"+"userA"` vs `"exp11"+"userA"`).
+2. Hash the key to a number (FNV/djb2 string hash, or `crypto.createHash('md5')` + take
+   leading bytes as int) — need reasonably uniform distribution.
+3. `bucket = hash % 100` → 0-99.
+4. Sort variants **deterministically** (by id or key — not DB insertion order, which isn't
+   guaranteed stable), walk them accumulating weight, first variant where
+   `bucket < cumulativeWeight` wins. Weights already validated to sum to 100 on the
+   draft→running transition (M3/M4 CRUD).
+5. Must be a **pure function** — (experimentId, userId, variants[]) → variant, no side
+   effects, no `Math.random()` (non-deterministic, breaks repeat-visit consistency). This is
+   exactly what makes it trivial to unit test in isolation — the milestone note about an
+   "AssignmentService easy to unit test" is pointing at this property.
+
 ## Status
 
 - [x] M1 — NestJS skeleton done (`GET /health`, `dev:api` wired).
