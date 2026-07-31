@@ -17,3 +17,7 @@ npm-debug.log*
 .idea/
 *.tsbuildinfo
 .omc/
+
+# Generated Prisma client (apps/api) — regenerated via `pnpm run db:generate`/`prisma generate`,
+# never committed, same treatment as dist/.
+apps/api/generated/

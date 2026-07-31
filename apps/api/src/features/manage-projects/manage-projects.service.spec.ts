@@ -1,83 +1,48 @@
 import { Test } from '@nestjs/testing';
 import { NotFoundException } from '@nestjs/common';
-import { DRIZZLE } from '@/db/drizzle.module';
+import { PrismaService } from '@/db/prisma.service';
 import { ManageProjectsService } from './manage-projects.service';
 
-type MockDb = {
-  select: jest.Mock;
-  insert: jest.Mock;
-  update: jest.Mock;
-  delete: jest.Mock;
+type MockPrisma = {
+  project: {
+    create: jest.Mock<
+      Promise<unknown>,
+      [{ data: { name: string; apiKeyHash: string } }]
+    >;
+    findMany: jest.Mock;
+    findUnique: jest.Mock;
+    updateManyAndReturn: jest.Mock;
+    deleteMany: jest.Mock;
+  };
 };
 
-function createMockDb(): MockDb {
+function createMockPrisma(): MockPrisma {
   return {
-    select: jest.fn(),
-    insert: jest.fn(),
-    update: jest.fn(),
-    delete: jest.fn(),
+    project: {
+      create: jest.fn<
+        Promise<unknown>,
+        [{ data: { name: string; apiKeyHash: string } }]
+      >(),
+      findMany: jest.fn(),
+      findUnique: jest.fn(),
+      updateManyAndReturn: jest.fn(),
+      deleteMany: jest.fn(),
+    },
   };
-}
-
-function mockInsert<Values extends Record<string, unknown>>(
-  db: MockDb,
-  resolvedRows: unknown[],
-) {
-  const valuesFn = jest.fn() as jest.Mock<
-    { returning: jest.Mock<Promise<unknown[]>, []> },
-    [Values]
-  >;
-  valuesFn.mockReturnValue({
-    returning: jest.fn().mockResolvedValue(resolvedRows) as jest.Mock<
-      Promise<unknown[]>,
-      []
-    >,
-  });
-  db.insert.mockReturnValueOnce({ values: valuesFn });
-  return valuesFn;
-}
-
-function mockSelectFrom(db: MockDb, resolvedRows: unknown[]) {
-  db.select.mockReturnValueOnce({
-    from: jest.fn().mockResolvedValue(resolvedRows),
-  });
-}
-
-function mockSelectWhere(db: MockDb, resolvedRows: unknown[]) {
-  db.select.mockReturnValueOnce({
-    from: jest.fn().mockReturnValue({
-      where: jest.fn().mockResolvedValue(resolvedRows),
-    }),
-  });
-}
-
-function mockUpdate(db: MockDb, resolvedRows: unknown[]) {
-  db.update.mockReturnValueOnce({
-    set: jest.fn().mockReturnValue({
-      where: jest.fn().mockReturnValue({
-        returning: jest.fn().mockResolvedValue(resolvedRows),
-      }),
-    }),
-  });
-}
-
-function mockDelete(db: MockDb, resolvedRows: unknown[]) {
-  db.delete.mockReturnValueOnce({
-    where: jest.fn().mockReturnValue({
-      returning: jest.fn().mockResolvedValue(resolvedRows),
-    }),
-  });
 }
 
 describe('ManageProjectsService', () => {
   let service: ManageProjectsService;
-  let db: MockDb;
+  let prisma: MockPrisma;
 
   beforeEach(async () => {
-    db = createMockDb();
+    prisma = createMockPrisma();
 
     const module = await Test.createTestingModule({
-      providers: [ManageProjectsService, { provide: DRIZZLE, useValue: db }],
+      providers: [
+        ManageProjectsService,
+        { provide: PrismaService, useValue: prisma },
+      ],
     }).compile();
 
     service = module.get(ManageProjectsService);
@@ -85,13 +50,15 @@ describe('ManageProjectsService', () => {
 
   describe('create', () => {
     it('saves a hash, not the raw key, and returns the raw key exactly once', async () => {
-      const valuesFn = mockInsert<{ name: string; apiKeyHash: string }>(db, [
-        { id: 'uuid-1', name: 'Test', apiKeyHash: 'hash-placeholder' },
-      ]);
+      prisma.project.create.mockResolvedValueOnce({
+        id: 'uuid-1',
+        name: 'Test',
+        apiKeyHash: 'hash-placeholder',
+      });
 
       const result = await service.create({ name: 'Test' });
 
-      const savedArg = valuesFn.mock.calls[0][0];
+      const savedArg = prisma.project.create.mock.calls[0][0].data;
       expect(savedArg.apiKeyHash).toEqual(expect.any(String));
       expect(savedArg.apiKeyHash).not.toEqual(result.apiKey);
       expect(result).not.toHaveProperty('apiKeyHash');
@@ -100,7 +67,7 @@ describe('ManageProjectsService', () => {
 
   describe('findAll', () => {
     it('never returns apiKeyHash for any project', async () => {
-      mockSelectFrom(db, [
+      prisma.project.findMany.mockResolvedValueOnce([
         { id: '1', name: 'X', apiKeyHash: 'hash-1' },
         { id: '2', name: 'Y', apiKeyHash: 'hash-2' },
       ]);
@@ -116,14 +83,18 @@ describe('ManageProjectsService', () => {
 
   describe('findOne', () => {
     it('throws NotFoundException when project does not exist', async () => {
-      mockSelectWhere(db, []);
+      prisma.project.findUnique.mockResolvedValueOnce(null);
       await expect(service.findOne('missing-id')).rejects.toThrow(
         NotFoundException,
       );
     });
 
     it('never returns apiKeyHash when found', async () => {
-      mockSelectWhere(db, [{ id: '1', name: 'X', apiKeyHash: 'secret-hash' }]);
+      prisma.project.findUnique.mockResolvedValueOnce({
+        id: '1',
+        name: 'X',
+        apiKeyHash: 'secret-hash',
+      });
       const result = await service.findOne('1');
       expect(result).toEqual({ id: '1', name: 'X' });
       expect(result).not.toHaveProperty('apiKeyHash');
@@ -132,7 +103,7 @@ describe('ManageProjectsService', () => {
 
   describe('update', () => {
     it('throws NotFoundException when project does not exist', async () => {
-      mockUpdate(db, []);
+      prisma.project.updateManyAndReturn.mockResolvedValueOnce([]);
       await expect(
         service.update('missing-id', { name: 'New' }),
       ).rejects.toThrow(NotFoundException);
@@ -141,14 +112,14 @@ describe('ManageProjectsService', () => {
 
   describe('remove', () => {
     it('throws NotFoundException when nothing was deleted', async () => {
-      mockDelete(db, []);
+      prisma.project.deleteMany.mockResolvedValueOnce({ count: 0 });
       await expect(service.remove('missing-id')).rejects.toThrow(
         NotFoundException,
       );
     });
 
     it('resolves when a row was deleted', async () => {
-      mockDelete(db, [{ id: '1', name: 'X', apiKeyHash: 'hash' }]);
+      prisma.project.deleteMany.mockResolvedValueOnce({ count: 1 });
       await expect(service.remove('1')).resolves.toBeUndefined();
     });
   });

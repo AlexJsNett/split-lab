@@ -12,8 +12,9 @@ architecture, clean architecture — translated from frontend-FSD to a NestJS ba
   `features/` = business actions/use-cases that use one or more entities. No `pages/` or
   `widgets/` layer — those are frontend-only, meaningless on a backend.
 - **Clean-architecture-lite**: inside a slice, `domain/` holds framework-free types and
-  rules (no `@Injectable()`, no Drizzle imports); `infrastructure/` holds the NestJS/Drizzle
-  wiring that implements/uses those types. Don't take this further than that for now — full
+  rules (no `@Injectable()`, no Prisma imports); `infrastructure/` (where a slice has one —
+  entities no longer do, see below) holds the NestJS wiring that implements/uses those types.
+  Don't take this further than that for now — full
   ports-and-adapters with repository interfaces everywhere is more ceremony than a
   single-team project this size needs yet. Revisit if `apps/api` grows past a few
   entities/features and the coupling actually starts hurting.
@@ -34,15 +35,17 @@ apps/api/src/
   entities/
     project/
       domain/              # Project type/interface, no framework imports
-      infrastructure/       # Drizzle schema (pgTable)
       project.module.ts
     feature-flag/
       domain/
-      infrastructure/
       feature-flag.module.ts
     experiment/            # lands M4
     variant/               # lands M4
     event/                 # lands M4/M5
+    # No per-entity infrastructure/ folder — Prisma's tooling requires every model to live
+    # under apps/api/prisma/, so schema co-location isn't achievable the way Drizzle's
+    # per-entity pgTable schema was. See apps/api/prisma/schema.prisma (single file, all 5
+    # models) and data-layer.md for the full reasoning.
 
   features/
     evaluate-flag/          # lands M3 — GET /projects/:id/flags/:key/evaluate

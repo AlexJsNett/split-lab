@@ -5,6 +5,14 @@ module.exports = (options) => ({
   ...options,
   resolve: {
     ...options.resolve,
+    // Prisma's generated client (apps/api/generated/prisma) is a CJS-targeted client whose
+    // relative imports carry an explicit ".js" extension (required by TS's nodenext module
+    // resolution — see prisma/schema.prisma's generator block). The generated files on disk
+    // are still ".ts" though (compiled by this same webpack build, not pre-compiled by
+    // Prisma), so webpack's resolver needs to know a ".js" specifier may really mean ".ts".
+    extensionAlias: {
+      '.js': ['.ts', '.js'],
+    },
     plugins: [
       ...(options.resolve?.plugins || []),
       new TsconfigPathsPlugin({ configFile: './tsconfig.json' }),

@@ -1,0 +1,104 @@
+// Prisma schema for apps/api — 1:1 with the prior Drizzle schema (entities/*/infrastructure).
+// Generated client output is intentionally kept OUTSIDE src/ (see generator block below) so
+// Jest's coverage collection, the lint glob, prettier's format script, and tsc --noEmit never
+// touch generated code. apps/api/src/db/prisma-client.ts re-exports it through the @/* alias.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../generated/prisma"
+
+  // This project compiles to CommonJS (tsconfig's "module": "nodenext" resolves to CJS because
+  // package.json has no "type": "module"). Prisma's own module-format auto-detection only
+  // recognizes the literal string "commonjs" in tsconfig, not "nodenext" — left implicit, it
+  // would silently generate an ESM client that breaks under ts-jest/ts-node. All three settings
+  // below must be explicit for that reason, not stylistic preference.
+  runtime             = "nodejs"
+  moduleFormat         = "cjs"
+  importFileExtension = "js"
+}
+
+// Prisma 7 no longer accepts `url` here — Migrate reads the connection string from
+// prisma.config.ts's `datasource.url`, and PrismaService passes the same DATABASE_URL to
+// @prisma/adapter-pg at runtime instead.
+datasource db {
+  provider = "postgresql"
+}
+
+model Project {
+  id   String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  // String -> Prisma's `text` and DateTime -> `timestamp(3)` are Prisma's own defaults for
+  // those types on postgresql (not `varchar`/microsecond timestamps) — accepted as-is, not a
+  // silent side effect.
+  name String
+
+  apiKeyHash String @unique
+
+  featureFlags FeatureFlag[]
+  experiments  Experiment[]
+
+  @@map("projects")
+}
+
+model FeatureFlag {
+  id   String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  key  String
+
+  enabled        Boolean @default(false)
+  rolloutPercent Int     @default(0)
+
+  projectId String  @db.Uuid
+  project   Project @relation(fields: [projectId], references: [id])
+
+  // Back-relation only — no cross-entity joins happen in application code today, but Prisma
+  // requires relations declared on both sides even for a one-directional FK, unlike Drizzle's
+  // one-sided `.references()`. New ceremony from the ORM swap, not a design choice.
+  experiments Experiment[]
+
+  @@map("feature_flags")
+}
+
+model Experiment {
+  id     String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name   String
+  status String @default("draft")
+
+  projectId String  @db.Uuid
+  project   Project @relation(fields: [projectId], references: [id])
+
+  flagId String?      @db.Uuid
+  flag   FeatureFlag? @relation(fields: [flagId], references: [id])
+
+  variants Variant[]
+  events   Event[]
+
+  @@map("experiments")
+}
+
+model Variant {
+  id     String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  key    String
+  weight Int
+
+  experimentId String     @db.Uuid
+  experiment   Experiment @relation(fields: [experimentId], references: [id])
+
+  events Event[]
+
+  @@map("variants")
+}
+
+model Event {
+  id     String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId String
+  type   String
+
+  createdAt DateTime @default(now())
+
+  experimentId String     @db.Uuid
+  experiment   Experiment @relation(fields: [experimentId], references: [id])
+
+  variantId String  @db.Uuid
+  variant   Variant @relation(fields: [variantId], references: [id])
+
+  @@map("events")
+}

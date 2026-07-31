@@ -21,7 +21,7 @@ split-lab/
 - **`apps/api`** — NestJS API server. Domain logic, DB, auth, queues. Tech choices, fixed by
   the target stack (not a free pick):
   - Framework: **NestJS** (modules/controllers/providers/DI — this structure is the point)
-  - ORM: **Drizzle**
+  - ORM: **Prisma**
   - Primary DB: **PostgreSQL**
   - Cache / queue backing: **Redis**
   - Message broker: **RabbitMQ** (BullMQ-on-Redis first as a warm-up, then RabbitMQ for the
@@ -74,5 +74,17 @@ variant weights.
   `milestones.md`'s "Stretch — Prisma exposure" entry for the reasoning trail). All 4
   services rewritten on the new query client, same route/response shape, no API contract
   changes for consumers.
+- Data layer switched a second time, Drizzle to Prisma, still within M4 (developer's
+  explicit override of the bounded "Stretch — Prisma exposure" plan, now marked SUPERSEDED
+  in `milestones.md` — full rewrite instead of the one-entity exercise). Schema lives in
+  `apps/api/prisma/schema.prisma`; the generated client is emitted to `apps/api/generated/
+  prisma` (outside `src/`, gitignored, regenerated via `pnpm run db:generate`) and re-exported
+  through `src/db/prisma-client.ts` so the rest of the app still imports via the `@/*` alias.
+  `PrismaService`/`PrismaModule` (`src/db/`) replace the `DRIZZLE`-token `DrizzleModule` — a
+  real injectable class this time, so no custom provider token is needed (see
+  `nestjs-concepts.md`). All 5 services (the 4 CRUD services plus `assign-variant`)
+  rewritten onto Prisma's flat-method client, same route/response shapes, no API contract
+  changes for consumers. `data-layer.md` documents the full migration-workflow and
+  entity-organization change in detail.
 - This section should be updated (which milestone is current, what changed structurally)
   whenever a milestone that touches architecture lands — not left stale.

@@ -3,57 +3,54 @@
 100% coverage policy (see `AGENTS.md`) means tests land with every milestone, not deferred to
 M8 — M8 is "close any remaining gaps," not "write the first test."
 
-## Unit tests: service/logic classes, mocked Drizzle client
+## Unit tests: service/logic classes, mocked Prisma client
 
-Convention established in `manage-projects.service.spec.ts` (rewritten for Drizzle): mock the
-whole `DRIZZLE`-provided DB client, don't hit a real database. `Test.createTestingModule`
-builds a real Nest DI graph for the test, but with a fake client swapped in under the same
-token the service actually injects:
+Convention established across all 4 CRUD services' spec files (rewritten for Prisma): mock
+`PrismaService` itself, don't hit a real database. `Test.createTestingModule` builds a real
+Nest DI graph for the test, but with a fake client swapped in for the same class the service
+actually injects — no token involved any more (see `nestjs-concepts.md`'s closed arc on this):
 
 ```ts
 const module = await Test.createTestingModule({
   providers: [
     ManageProjectsService,
-    { provide: DRIZZLE, useValue: db },
+    { provide: PrismaService, useValue: prisma },
   ],
 }).compile();
 ```
 
-`db` is a plain object with `select`/`insert`/`update`/`delete` as `jest.fn()`s — but each of
-those isn't a single flat call the way `repository.findOneBy(...)` was. Drizzle's query
-builder is a *chain* (`db.select().from(table).where(cond)`), so the mock has to fake the
-whole chain shape, not just one function call. Per-test helpers build that chain fresh:
+`prisma` is a plain object shaped like `{ project: { create: jest.fn(), findMany: jest.fn(),
+... } }` — one flat `jest.fn()` per Prisma model method the service actually calls, **not** a
+chain. This is a real reversal of the prior framing in this file: Drizzle's query builder
+(`db.select().from(table).where(cond)`) needed each mock to fake an entire chain of
+`mockReturnValueOnce({...})` calls before the terminal link resolved real data, which is why
+the old Drizzle-era spec files carried a ~40-line `mockInsert`/`mockSelectWhere`/`mockUpdate`/
+`mockDelete` helper set. Prisma's client has no chain — `prisma.project.findUnique(...)` is
+already the terminal call — so each test just does:
 
 ```ts
-function mockSelectWhere(db: MockDb, resolvedRows: unknown[]) {
-  db.select.mockReturnValueOnce({
-    from: jest.fn().mockReturnValue({
-      where: jest.fn().mockResolvedValue(resolvedRows),
-    }),
-  });
-}
+prisma.project.findUnique.mockResolvedValueOnce({ id: '1', name: 'X', apiKeyHash: 'hash' });
 ```
 
-`.from()` returns an object whose `.where()` is the one that actually resolves — everything
-before the terminal link just has to return the next link in the chain
-(`mockReturnValue({...})`), only the terminal link resolves real data
-(`mockResolvedValue(resolvedRows)`). `insert`/`update`/`delete` follow the same idea with their
-own terminal link (usually `.returning()`). `mockReturnValueOnce` (not the plain `mockReturnValue`)
-matters when a single test triggers two sequential calls to the same method with different
-needed results — e.g. `assertProjectExists`'s existence check, then the real query — each
-configured independently, consumed in call order.
+That's the whole mock, no builder-chain helper needed. What was previously written off as "an
+accepted trade-off" (bulkier boilerplate from moving off TypeORM's flat `Repository` mocks onto
+Drizzle's chained builder) turned out to be reversible: Prisma's client is flat too, so this
+swap shrinks each spec file's mock plumbing back down to a handful of lines, not a regression to
+work around. It still tests the exact same thing across all 4 files: the service's *logic*
+(does it hash before saving, does it throw `NotFoundException` when nothing came back, does the
+response ever leak `apiKeyHash`, does `updateManyAndReturn`/`deleteMany` returning an empty
+array/zero count map to a 404) without depending on Postgres being up or caring what real SQL
+Prisma would generate.
 
-This is bulkier boilerplate than the old `Repository` mocks — an accepted trade-off from
-moving off TypeORM's object-shaped repository onto Drizzle's chained query builder, not a
-regression in test quality. It still tests the exact same thing: the service's *logic* (does
-it hash before saving, does it throw `NotFoundException` when nothing came back, does the
-response ever leak `apiKeyHash`) without depending on Postgres being up or caring what real SQL
-Drizzle would generate.
+Per `AGENTS.md`'s testing philosophy ("the extra e2e/mock practice on simple code is itself
+part of what this project trains"), this mock setup is kept copy-pasted per spec file rather
+than deduped into a shared test helper — a deliberate choice, not an oversight. At Prisma's
+flat-mock size the duplication cost is genuinely small.
 
 ## e2e tests: real app, real (but separate) database
 
 `test/*.e2e-spec.ts`, run via `pnpm run test:e2e` — boots the actual `AppModule` (real
-`DrizzleModule`, real Postgres in Docker) and hits routes through `supertest`.
+`PrismaModule`, real Postgres in Docker) and hits routes through `supertest`.
 Used sparingly (per `AGENTS.md`'s testing policy, these complement rather than replace unit
 tests) — currently just the M1 health check. Expand as controllers land, one happy-path e2e
 per resource is enough; edge cases and branching belong in the unit tests above.
@@ -63,13 +60,24 @@ dedicated one (`splitlab_test`), never the `splitlab` database you `curl` agains
 otherwise e2e runs would insert/delete real rows next to your own manual test data. This is
 wired through `NODE_ENV`:
 
-- `apps/api/.env.test` — same host/port/creds as `.env`, `DB_NAME=splitlab_test` instead of
-  `splitlab`. Gitignored (like `.env`), never committed.
+- `apps/api/.env.test` — same `DATABASE_URL` shape as `.env`, pointed at `splitlab_test`
+  instead of `splitlab` (a single connection-string var, not discrete `DB_HOST`/`DB_PORT`/
+  `DB_USER`/`DB_PASSWORD`/`DB_NAME` vars — that's the one env-var shape change from the Prisma
+  swap). Gitignored (like `.env`), never committed.
 - `AppModule`'s `ConfigModule.forRoot` picks `.env.test` over `.env` when `NODE_ENV=test`.
-- `drizzle.config.ts` and `src/db/migrate.ts` (the standalone CLI-facing files) do the same,
-  via `dotenv`'s `config({ path: ... })`.
+- `prisma.config.ts` (the standalone CLI-facing file) does the same, via `dotenv`'s
+  `config({ path: ... })`.
 - `pnpm run test:e2e` sets `NODE_ENV=test` before invoking Jest — this is the one thing that
   actually switches which database gets used; nothing else changes.
+
+**Jest + Prisma's WASM query compiler:** booting the real `PrismaService` (as e2e tests do)
+triggers Prisma 7's query-compiler loader, which uses a dynamic `import()` to load a WASM
+module. Jest's default CJS test environment blocks bare dynamic `import()` with `A dynamic
+import callback was invoked without --experimental-vm-modules` unless that Node flag is set —
+this only surfaces once a test actually constructs a real `PrismaService` (the mocked unit
+tests above never hit this, since they swap in a plain object and never call `$connect()`).
+`test:e2e`'s script sets `NODE_OPTIONS=--experimental-vm-modules` for exactly this reason —
+don't remove it, e2e tests fail immediately without it.
 
 `docker/init-test-db.sql` (mounted into the Postgres container at
 `/docker-entrypoint-initdb.d/`) creates `splitlab_test` automatically the first time the

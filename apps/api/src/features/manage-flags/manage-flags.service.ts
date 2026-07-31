@@ -1,44 +1,29 @@
-import { DRIZZLE } from '@/db/drizzle.module';
-import * as schema from '@/db/schema';
-import { featureFlags } from '@/entities/feature-flag/infrastructure/feature-flag.schema';
-import { projects } from '@/entities/project/infrastructure/project.schema';
-import { Inject, Injectable, NotFoundException } from '@nestjs/common';
-import { and, eq } from 'drizzle-orm';
-import { NodePgDatabase } from 'drizzle-orm/node-postgres';
+import { PrismaService } from '@/db/prisma.service';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { CreateFeatureFlagDto } from './dto/create-feature-flag.dto';
 import { UpdateFeatureFlagDto } from './dto/update-feature-flag.dto';
 
 @Injectable()
 export class ManageFlagsService {
-  constructor(
-    @Inject(DRIZZLE) private readonly db: NodePgDatabase<typeof schema>,
-  ) {}
+  constructor(private readonly prisma: PrismaService) {}
 
   async create(projectId: string, dto: CreateFeatureFlagDto) {
     await this.assertProjectExists(projectId);
 
-    const [flag] = await this.db
-      .insert(featureFlags)
-      .values({ projectId, ...dto })
-      .returning();
-    return flag;
+    return this.prisma.featureFlag.create({
+      data: { projectId, ...dto },
+    });
   }
 
   async findAll(projectId: string) {
     await this.assertProjectExists(projectId);
-    return this.db
-      .select()
-      .from(featureFlags)
-      .where(eq(featureFlags.projectId, projectId));
+    return this.prisma.featureFlag.findMany({ where: { projectId } });
   }
 
   async findOne(projectId: string, id: string) {
-    const [flag] = await this.db
-      .select()
-      .from(featureFlags)
-      .where(
-        and(eq(featureFlags.id, id), eq(featureFlags.projectId, projectId)),
-      );
+    const flag = await this.prisma.featureFlag.findFirst({
+      where: { id, projectId },
+    });
     if (!flag) {
       throw new NotFoundException(`Flag ${id} not found`);
     }
@@ -46,13 +31,10 @@ export class ManageFlagsService {
   }
 
   async update(projectId: string, id: string, dto: UpdateFeatureFlagDto) {
-    const [flag] = await this.db
-      .update(featureFlags)
-      .set(dto)
-      .where(
-        and(eq(featureFlags.id, id), eq(featureFlags.projectId, projectId)),
-      )
-      .returning();
+    const [flag] = await this.prisma.featureFlag.updateManyAndReturn({
+      where: { id, projectId },
+      data: dto,
+    });
     if (!flag) {
       throw new NotFoundException(`Flag ${id} not found`);
     }
@@ -60,22 +42,18 @@ export class ManageFlagsService {
   }
 
   async remove(projectId: string, id: string) {
-    const deleted = await this.db
-      .delete(featureFlags)
-      .where(
-        and(eq(featureFlags.id, id), eq(featureFlags.projectId, projectId)),
-      )
-      .returning();
-    if (deleted.length === 0) {
+    const { count } = await this.prisma.featureFlag.deleteMany({
+      where: { id, projectId },
+    });
+    if (count === 0) {
       throw new NotFoundException(`Flag ${id} not found`);
     }
   }
 
   private async assertProjectExists(projectId: string) {
-    const [project] = await this.db
-      .select()
-      .from(projects)
-      .where(eq(projects.id, projectId));
+    const project = await this.prisma.project.findUnique({
+      where: { id: projectId },
+    });
     if (!project) {
       throw new NotFoundException(`Project ${projectId} not found`);
     }

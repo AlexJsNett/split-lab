@@ -58,61 +58,72 @@ class never knows or cares how `AppService` is built internally — only its pub
    `@Injectable()`) on purpose, so business rules aren't entangled with Nest's DI machinery;
    `infrastructure/` holds the real providers Nest actually constructs and injects.
 
-## `@Inject()` + custom provider tokens (the `DRIZZLE` pattern)
+## `@Inject()` + custom provider tokens — the arc, closed
 
 `@InjectRepository(XEntity)` (TypeORM) worked because `XEntity` is a real class — decorator
 metadata can reflect a class reference at runtime, so Nest's DI can use the class itself as
-the lookup key. Drizzle has no such class: the DB client is a plain object returned by
-`drizzle(pool, { schema })`, and a `pgTable(...)` schema export is a plain const, not something
-`emitDecoratorMetadata` can turn into a lookup key. This is exactly the case the "Terms to fill
-in" note above used to flag: *"needed once dependencies are expressed as interfaces (no
-runtime type to reflect on)"* — that's now.
+the lookup key. Drizzle broke that: the DB client was a plain object returned by
+`drizzle(pool, { schema })`, and a `pgTable(...)` schema export was a plain const, not something
+`emitDecoratorMetadata` could turn into a lookup key. That forced a custom provider token — a
+`Symbol('DRIZZLE')` registered explicitly and named at every injection site with
+`@Inject(DRIZZLE)`, because there was no class for Nest to reflect on.
 
-The fix is a custom provider token — any unique value (a string, or here a `Symbol`) that
-stands in for "the thing this provider constructs," registered explicitly instead of relying
-on reflected class metadata:
-
-```ts
-// src/db/drizzle.module.ts
-export const DRIZZLE = Symbol('DRIZZLE');
-
-@Global()
-@Module({
-  providers: [
-    {
-      provide: DRIZZLE,
-      inject: [ConfigService],
-      useFactory: (config: ConfigService) => drizzle(pool, { schema }),
-    },
-  ],
-  exports: [DRIZZLE],
-})
-export class DrizzleModule {}
-```
-
-Consuming it needs `@Inject(DRIZZLE)` instead of a bare constructor-parameter type, because
-there's no class for Nest to reflect — the token has to be named explicitly at the injection
-site too:
+**Prisma undoes that need, for a genuinely structural reason, not a style change.**
+`PrismaService` is declared as `class PrismaService extends PrismaClient { ... }` — a *real
+class* with `@Injectable()` on it. Decorator metadata can reflect a class reference again, so
+Nest's DI goes back to the plain, boring case: a bare constructor-parameter type is enough,
+no token, no `@Inject()`, no `useFactory`:
 
 ```ts
-constructor(@Inject(DRIZZLE) private readonly db: NodePgDatabase<typeof schema>) {}
+// src/db/prisma.service.ts
+@Injectable()
+export class PrismaService extends PrismaClient implements OnModuleInit, OnModuleDestroy {
+  constructor(config: ConfigService) {
+    super({ adapter: new PrismaPg({ connectionString: config.get('DATABASE_URL') }) });
+  }
+  async onModuleInit() { await this.$connect(); }
+  async onModuleDestroy() { await this.$disconnect(); }
+}
 ```
+
+```ts
+// any service that needs data access
+constructor(private readonly prisma: PrismaService) {}
+```
+
+The general rule this leaves behind: **a custom provider token is only needed when the thing
+being injected has no class for Nest to reflect on** — a plain object, a value returned from a
+third-party factory function, an interface with no runtime representation. The moment the thing
+being provided is an actual `class`, the token disappears and injection goes back to being a
+constructor-parameter type, same as `AppService` in the very first example in this file.
 
 ## Module `imports`/`exports` in practice (`@Global()` modules)
 
-There's no `forFeature`-per-entity call anymore — Drizzle has no per-table repository object
-to register, just the one shared client. `DrizzleModule` is marked `@Global()` and imported
-once, in `AppModule`. A normal (non-global) module's providers are **private to the module
-that imported them** by default — that's still true here, and is the same visibility rule that
-mattered for the old per-entity `TypeOrmModule.forFeature` setup. `@Global()` is the escape
-hatch: mark a module global, import it once anywhere in the graph (root is conventional), and
-every other module can inject its exported providers without importing it themselves. Right
-tool here specifically because *every* feature module needs DB access — the per-entity
-`forFeature` approach made sense when each module only needed one specific repository; a
-single shared DB client used everywhere is exactly the "used almost universally" case
-`@Global()` exists for. Overusing `@Global()` for things that aren't truly cross-cutting would
-undo the "module boundaries are enforced" property described above — this is the one exception,
-not the default.
+There's no `forFeature`-per-entity call — Prisma's generated client exposes every model
+(`prisma.project`, `prisma.featureFlag`, etc.) as a property of one shared instance, so there's
+no per-table repository object to register the way TypeORM's `forFeature` needed. `PrismaModule`
+is marked `@Global()` and imported once, in `AppModule`:
+
+```ts
+// src/db/prisma.module.ts
+@Global()
+@Module({
+  imports: [ConfigModule],
+  providers: [PrismaService],
+  exports: [PrismaService],
+})
+export class PrismaModule {}
+```
+
+A normal (non-global) module's providers are **private to the module that imported them** by
+default — that's still true here, and is the same visibility rule that mattered for the old
+per-entity `TypeOrmModule.forFeature` setup. `@Global()` is the escape hatch: mark a module
+global, import it once anywhere in the graph (root is conventional), and every other module can
+inject its exported providers without importing it themselves. Right tool here specifically
+because *every* feature module needs DB access — a single shared DB client used everywhere is
+exactly the "used almost universally" case `@Global()` exists for. Overusing `@Global()` for
+things that aren't truly cross-cutting would undo the "module boundaries are enforced" property
+described above — this is the one exception, not the default.
 
 ## Terms to fill in as they come up
 

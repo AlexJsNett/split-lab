@@ -5,5 +5,6 @@ import { ManageExperimentsController } from './manage-experiments.controller';
 @Module({
   controllers: [ManageExperimentsController],
   providers: [ManageExperimentsService],
+  exports: [ManageExperimentsService],
 })
 export class ManageExperimentsModule {}

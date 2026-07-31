@@ -3,9 +3,11 @@ packages:
 allowBuilds:
   '@nestjs/core': false
   '@parcel/watcher': true
+  '@prisma/engines': true
   esbuild: true
   lmdb: true
   msgpackr-extract: true
+  prisma: true
   unrs-resolver: true
 minimumReleaseAgeExclude:
   - '@angular-devkit/architect@0.2200.9'

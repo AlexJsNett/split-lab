@@ -1,48 +1,33 @@
-import { DRIZZLE } from '@/db/drizzle.module';
-import * as schema from '@/db/schema';
-import { experiments } from '@/entities/experiment/infrastructure/experiment.schema';
-import { projects } from '@/entities/project/infrastructure/project.schema';
-import { variants } from '@/entities/variant/infrastructure/variant.schema';
+import { PrismaService } from '@/db/prisma.service';
 import {
   BadRequestException,
-  Inject,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { and, eq } from 'drizzle-orm';
-import { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import { CreateExperimentDto } from './dto/create-experiment.dto';
 import { UpdateExperimentDto } from './dto/update-experiment.dto';
 
 @Injectable()
 export class ManageExperimentsService {
-  constructor(
-    @Inject(DRIZZLE) private readonly db: NodePgDatabase<typeof schema>,
-  ) {}
+  constructor(private readonly prisma: PrismaService) {}
 
   async create(projectId: string, dto: CreateExperimentDto) {
     await this.assertProjectExists(projectId);
 
-    const [experiment] = await this.db
-      .insert(experiments)
-      .values({ projectId, ...dto })
-      .returning();
-    return experiment;
+    return this.prisma.experiment.create({
+      data: { projectId, ...dto },
+    });
   }
 
   async findAll(projectId: string) {
     await this.assertProjectExists(projectId);
-    return this.db
-      .select()
-      .from(experiments)
-      .where(eq(experiments.projectId, projectId));
+    return this.prisma.experiment.findMany({ where: { projectId } });
   }
 
   async findOne(projectId: string, id: string) {
-    const [experiment] = await this.db
-      .select()
-      .from(experiments)
-      .where(and(eq(experiments.id, id), eq(experiments.projectId, projectId)));
+    const experiment = await this.prisma.experiment.findFirst({
+      where: { id, projectId },
+    });
     if (!experiment) {
       throw new NotFoundException(
         `Experiment ${id} not found in project ${projectId}`,
@@ -52,10 +37,9 @@ export class ManageExperimentsService {
   }
 
   async update(projectId: string, id: string, dto: UpdateExperimentDto) {
-    const [experiment] = await this.db
-      .select()
-      .from(experiments)
-      .where(and(eq(experiments.id, id), eq(experiments.projectId, projectId)));
+    const experiment = await this.prisma.experiment.findFirst({
+      where: { id, projectId },
+    });
     if (!experiment) {
       throw new NotFoundException(
         `Experiment ${id} not found in project ${projectId}`,
@@ -63,10 +47,9 @@ export class ManageExperimentsService {
     }
 
     if (dto.status === 'running') {
-      const experimentVariants = await this.db
-        .select()
-        .from(variants)
-        .where(eq(variants.experimentId, id));
+      const experimentVariants = await this.prisma.variant.findMany({
+        where: { experimentId: id },
+      });
       const totalWeight = experimentVariants.reduce(
         (sum, variant) => sum + variant.weight,
         0,
@@ -78,29 +61,26 @@ export class ManageExperimentsService {
       }
     }
 
-    const [updated] = await this.db
-      .update(experiments)
-      .set(dto)
-      .where(eq(experiments.id, id))
-      .returning();
+    const [updated] = await this.prisma.experiment.updateManyAndReturn({
+      where: { id },
+      data: dto,
+    });
     return updated;
   }
 
   async remove(projectId: string, id: string) {
-    const deleted = await this.db
-      .delete(experiments)
-      .where(and(eq(experiments.id, id), eq(experiments.projectId, projectId)))
-      .returning();
-    if (deleted.length === 0) {
+    const { count } = await this.prisma.experiment.deleteMany({
+      where: { id, projectId },
+    });
+    if (count === 0) {
       throw new NotFoundException(`Experiment ${id} not found`);
     }
   }
 
   private async assertProjectExists(projectId: string) {
-    const [project] = await this.db
-      .select()
-      .from(projects)
-      .where(eq(projects.id, projectId));
+    const project = await this.prisma.project.findUnique({
+      where: { id: projectId },
+    });
     if (!project) {
       throw new NotFoundException(`Project ${projectId} not found`);
     }
