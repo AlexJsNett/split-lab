@@ -1,29 +1,42 @@
-import { PrismaService } from '@/db/prisma.service';
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { DRIZZLE } from '@/db/drizzle.module';
+import * as schema from '@/db/schema';
+import { variants } from '@/entities/variant/infrastructure/variant.schema';
+import { experiments } from '@/entities/experiment/infrastructure/experiment.schema';
+import { Inject, Injectable, NotFoundException } from '@nestjs/common';
+import { and, eq } from 'drizzle-orm';
+import { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import { CreateVariantDto } from './dto/create-variant.dto';
 import { UpdateVariantDto } from './dto/update-variant.dto';
 
 @Injectable()
 export class ManageVariantsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    @Inject(DRIZZLE) private readonly db: NodePgDatabase<typeof schema>,
+  ) {}
 
   async create(experimentId: string, dto: CreateVariantDto) {
     await this.assertExperimentExists(experimentId);
 
-    return this.prisma.variant.create({
-      data: { experimentId, ...dto },
-    });
+    const [variant] = await this.db
+      .insert(variants)
+      .values({ experimentId, ...dto })
+      .returning();
+    return variant;
   }
 
   async findAll(experimentId: string) {
     await this.assertExperimentExists(experimentId);
-    return this.prisma.variant.findMany({ where: { experimentId } });
+    return this.db
+      .select()
+      .from(variants)
+      .where(eq(variants.experimentId, experimentId));
   }
 
   async findOne(experimentId: string, id: string) {
-    const variant = await this.prisma.variant.findFirst({
-      where: { id, experimentId },
-    });
+    const [variant] = await this.db
+      .select()
+      .from(variants)
+      .where(and(eq(variants.id, id), eq(variants.experimentId, experimentId)));
     if (!variant) {
       throw new NotFoundException(`Variant ${id} not found`);
     }
@@ -31,10 +44,11 @@ export class ManageVariantsService {
   }
 
   async update(experimentId: string, id: string, dto: UpdateVariantDto) {
-    const [variant] = await this.prisma.variant.updateManyAndReturn({
-      where: { id, experimentId },
-      data: dto,
-    });
+    const [variant] = await this.db
+      .update(variants)
+      .set(dto)
+      .where(and(eq(variants.id, id), eq(variants.experimentId, experimentId)))
+      .returning();
     if (!variant) {
       throw new NotFoundException(`Variant ${id} not found`);
     }
@@ -42,18 +56,20 @@ export class ManageVariantsService {
   }
 
   async remove(experimentId: string, id: string) {
-    const { count } = await this.prisma.variant.deleteMany({
-      where: { id, experimentId },
-    });
-    if (count === 0) {
+    const deleted = await this.db
+      .delete(variants)
+      .where(and(eq(variants.id, id), eq(variants.experimentId, experimentId)))
+      .returning();
+    if (deleted.length === 0) {
       throw new NotFoundException(`Variant ${id} not found`);
     }
   }
 
   private async assertExperimentExists(experimentId: string) {
-    const experiment = await this.prisma.experiment.findUnique({
-      where: { id: experimentId },
-    });
+    const [experiment] = await this.db
+      .select()
+      .from(experiments)
+      .where(eq(experiments.id, experimentId));
     if (!experiment) {
       throw new NotFoundException(`Experiment ${experimentId} not found`);
     }

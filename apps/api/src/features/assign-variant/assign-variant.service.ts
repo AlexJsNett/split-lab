@@ -1,12 +1,17 @@
-import { PrismaService } from '@/db/prisma.service';
+import { DRIZZLE } from '@/db/drizzle.module';
+import * as schema from '@/db/schema';
 import { assignVariant } from '@/entities/experiment/domain/assign-variant';
+import { variants } from '@/entities/variant/infrastructure/variant.schema';
+import { events } from '@/entities/event/infrastructure/event.schema';
 import { ManageExperimentsService } from '@/features/manage-experiments/manage-experiments.service';
-import { BadRequestException, Injectable } from '@nestjs/common';
+import { BadRequestException, Inject, Injectable } from '@nestjs/common';
+import { eq } from 'drizzle-orm';
+import { NodePgDatabase } from 'drizzle-orm/node-postgres';
 
 @Injectable()
 export class AssignVariantService {
   constructor(
-    private readonly prisma: PrismaService,
+    @Inject(DRIZZLE) private readonly db: NodePgDatabase<typeof schema>,
     private readonly manageExperimentsService: ManageExperimentsService,
   ) {}
 
@@ -21,19 +26,18 @@ export class AssignVariantService {
       );
     }
 
-    const experimentVariants = await this.prisma.variant.findMany({
-      where: { experimentId },
-    });
+    const experimentVariants = await this.db
+      .select()
+      .from(variants)
+      .where(eq(variants.experimentId, experimentId));
 
     const variant = assignVariant(experimentId, userId, experimentVariants);
 
-    await this.prisma.event.create({
-      data: {
-        experimentId,
-        variantId: variant.id,
-        userId,
-        type: 'exposure',
-      },
+    await this.db.insert(events).values({
+      experimentId,
+      variantId: variant.id,
+      userId,
+      type: 'exposure',
     });
 
     return variant;

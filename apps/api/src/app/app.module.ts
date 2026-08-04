@@ -1,7 +1,7 @@
 import { Module } from '@nestjs/common';
 import { HealthController } from './health.controller';
 import { ConfigModule } from '@nestjs/config';
-import { PrismaModule } from '@/db/prisma.module';
+import { DrizzleModule } from '@/db/drizzle.module';
 import { ManageProjectsModule } from '@/features/manage-projects/manage-projects.module';
 import { ManageFlagsModule } from '@/features/manage-flags/manage-flags.module';
 import { ManageVariantsModule } from '@/features/manage-variants/manage-variants.module';
@@ -14,7 +14,7 @@ import { AssignVariantModule } from '@/features/assign-variant/assign-variant.mo
       isGlobal: true,
       envFilePath: process.env.NODE_ENV === 'test' ? '.env.test' : '.env',
     }),
-    PrismaModule,
+    DrizzleModule,
     ManageProjectsModule,
     ManageFlagsModule,
     ManageVariantsModule,

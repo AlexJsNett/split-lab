@@ -1,54 +1,77 @@
 import { Test } from '@nestjs/testing';
 import { NotFoundException } from '@nestjs/common';
-import { PrismaService } from '@/db/prisma.service';
+import { DRIZZLE } from '@/db/drizzle.module';
 import { ManageFlagsService } from './manage-flags.service';
 
-type MockPrisma = {
-  project: {
-    findUnique: jest.Mock;
-  };
-  featureFlag: {
-    create: jest.Mock<
-      Promise<unknown>,
-      [{ data: { projectId: string; key: string } }]
-    >;
-    findMany: jest.Mock;
-    findFirst: jest.Mock;
-    updateManyAndReturn: jest.Mock;
-    deleteMany: jest.Mock;
-  };
+type MockDb = {
+  select: jest.Mock;
+  insert: jest.Mock;
+  update: jest.Mock;
+  delete: jest.Mock;
 };
 
-function createMockPrisma(): MockPrisma {
+function createMockDb(): MockDb {
   return {
-    project: {
-      findUnique: jest.fn(),
-    },
-    featureFlag: {
-      create: jest.fn<
-        Promise<unknown>,
-        [{ data: { projectId: string; key: string } }]
-      >(),
-      findMany: jest.fn(),
-      findFirst: jest.fn(),
-      updateManyAndReturn: jest.fn(),
-      deleteMany: jest.fn(),
-    },
+    select: jest.fn(),
+    insert: jest.fn(),
+    update: jest.fn(),
+    delete: jest.fn(),
   };
+}
+
+function mockInsert<Values extends Record<string, unknown>>(
+  db: MockDb,
+  resolvedRows: unknown[],
+) {
+  const valuesFn = jest.fn() as jest.Mock<
+    { returning: jest.Mock<Promise<unknown[]>, []> },
+    [Values]
+  >;
+  valuesFn.mockReturnValue({
+    returning: jest.fn().mockResolvedValue(resolvedRows) as jest.Mock<
+      Promise<unknown[]>,
+      []
+    >,
+  });
+  db.insert.mockReturnValueOnce({ values: valuesFn });
+  return valuesFn;
+}
+
+function mockSelectWhere(db: MockDb, resolvedRows: unknown[]) {
+  db.select.mockReturnValueOnce({
+    from: jest.fn().mockReturnValue({
+      where: jest.fn().mockResolvedValue(resolvedRows),
+    }),
+  });
+}
+
+function mockUpdate(db: MockDb, resolvedRows: unknown[]) {
+  db.update.mockReturnValueOnce({
+    set: jest.fn().mockReturnValue({
+      where: jest.fn().mockReturnValue({
+        returning: jest.fn().mockResolvedValue(resolvedRows),
+      }),
+    }),
+  });
+}
+
+function mockDelete(db: MockDb, resolvedRows: unknown[]) {
+  db.delete.mockReturnValueOnce({
+    where: jest.fn().mockReturnValue({
+      returning: jest.fn().mockResolvedValue(resolvedRows),
+    }),
+  });
 }
 
 describe('ManageFlagsService', () => {
   let service: ManageFlagsService;
-  let prisma: MockPrisma;
+  let db: MockDb;
 
   beforeEach(async () => {
-    prisma = createMockPrisma();
+    db = createMockDb();
 
     const module = await Test.createTestingModule({
-      providers: [
-        ManageFlagsService,
-        { provide: PrismaService, useValue: prisma },
-      ],
+      providers: [ManageFlagsService, { provide: DRIZZLE, useValue: db }],
     }).compile();
 
     service = module.get(ManageFlagsService);
@@ -56,39 +79,35 @@ describe('ManageFlagsService', () => {
 
   describe('create', () => {
     it('throws NotFoundException when project does not exist', async () => {
-      prisma.project.findUnique.mockResolvedValueOnce(null);
+      mockSelectWhere(db, []);
       await expect(
         service.create('missing-project', { key: 'new-flag' }),
       ).rejects.toThrow(NotFoundException);
-      expect(prisma.featureFlag.create).not.toHaveBeenCalled();
+      expect(db.insert).not.toHaveBeenCalled();
     });
 
     it('saves the flag scoped to the project when the project exists', async () => {
-      prisma.project.findUnique.mockResolvedValueOnce({
-        id: 'project-1',
-        name: 'X',
-        apiKeyHash: 'hash',
-      });
-      prisma.featureFlag.create.mockResolvedValueOnce({
-        id: 'flag-1',
-        projectId: 'project-1',
-        key: 'new-flag',
-        enabled: false,
-        rolloutPercent: 0,
-      });
+      mockSelectWhere(db, [{ id: 'project-1', name: 'X', apiKeyHash: 'hash' }]);
+      const valuesFn = mockInsert<{ projectId: string; key: string }>(db, [
+        {
+          id: 'flag-1',
+          projectId: 'project-1',
+          key: 'new-flag',
+          enabled: false,
+          rolloutPercent: 0,
+        },
+      ]);
 
       const result = await service.create('project-1', { key: 'new-flag' });
 
-      expect(prisma.featureFlag.create.mock.calls[0][0].data.projectId).toEqual(
-        'project-1',
-      );
+      expect(valuesFn.mock.calls[0][0].projectId).toEqual('project-1');
       expect(result.id).toEqual('flag-1');
     });
   });
 
   describe('findAll', () => {
     it('throws NotFoundException when project does not exist', async () => {
-      prisma.project.findUnique.mockResolvedValueOnce(null);
+      mockSelectWhere(db, []);
       await expect(service.findAll('missing-project')).rejects.toThrow(
         NotFoundException,
       );
@@ -97,7 +116,7 @@ describe('ManageFlagsService', () => {
 
   describe('findOne', () => {
     it('throws NotFoundException when flag does not exist in that project', async () => {
-      prisma.featureFlag.findFirst.mockResolvedValueOnce(null);
+      mockSelectWhere(db, []);
       await expect(service.findOne('project-1', 'missing-id')).rejects.toThrow(
         NotFoundException,
       );
@@ -106,14 +125,14 @@ describe('ManageFlagsService', () => {
 
   describe('update', () => {
     it('throws NotFoundException when flag does not exist in that project', async () => {
-      prisma.featureFlag.updateManyAndReturn.mockResolvedValueOnce([]);
+      mockUpdate(db, []);
       await expect(
         service.update('project-1', 'missing-id', { enabled: true }),
       ).rejects.toThrow(NotFoundException);
     });
 
     it('merges the dto onto the existing flag and saves it', async () => {
-      prisma.featureFlag.updateManyAndReturn.mockResolvedValueOnce([
+      mockUpdate(db, [
         {
           id: 'flag-1',
           projectId: 'project-1',
@@ -134,14 +153,22 @@ describe('ManageFlagsService', () => {
 
   describe('remove', () => {
     it('throws NotFoundException when nothing was deleted', async () => {
-      prisma.featureFlag.deleteMany.mockResolvedValueOnce({ count: 0 });
+      mockDelete(db, []);
       await expect(service.remove('project-1', 'missing-id')).rejects.toThrow(
         NotFoundException,
       );
     });
 
     it('resolves when a row was deleted', async () => {
-      prisma.featureFlag.deleteMany.mockResolvedValueOnce({ count: 1 });
+      mockDelete(db, [
+        {
+          id: 'flag-1',
+          projectId: 'project-1',
+          key: 'x',
+          enabled: false,
+          rolloutPercent: 0,
+        },
+      ]);
       await expect(
         service.remove('project-1', 'flag-1'),
       ).resolves.toBeUndefined();

@@ -40,7 +40,7 @@ deterministic assignment endpoint is next). Open `milestones.md` for what's afte
   specific pattern is usually done — just say so explicitly so Claude knows it's a
   deliberate exception, not the default mode.
 - **Teach, don't just direct — mandatory, not optional.** The developer has zero prior
-  experience with this entire stack (NestJS, Prisma, Postgres, Docker, Redis, RabbitMQ —
+  experience with this entire stack (NestJS, Drizzle, Postgres, Docker, Redis, RabbitMQ —
   all of it, first time touching any of it). Every step handed over must come with *why*,
   not just *what* — never assume a step is "obvious" or skip the explanation to save time.
   Concrete conceptual explanations (DI, decorators, module boundaries, etc.) that come up

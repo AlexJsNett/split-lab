@@ -8,7 +8,7 @@ planning the next one or checking what's still ahead.
 
 - [x] **M1 — NestJS skeleton**: `nest new`, `GET /health` returns 200, TypeScript configured,
       dev script with hot reload. Wire `dev:api` at the root to run it.
-- [x] **M2 — Data layer**: Docker Compose with a Postgres container, Prisma connected,
+- [x] **M2 — Data layer**: Docker Compose with a Postgres container, Drizzle connected,
       schemas for `Project` and `FeatureFlag`, migrations (not `drizzle-kit push`).
 - [x] **M3 — Projects & Flags CRUD**: NestJS controllers/services/DTOs, `class-validator`
       input validation, meaningful error responses (RESTful conventions — status codes,
@@ -17,10 +17,10 @@ planning the next one or checking what's still ahead.
       assignment endpoint (`GET /experiments/:id/assign?userId=`), log an exposure event
       on assignment. Apply SOLID where it's actually warranted (e.g. an `AssignmentService`
       that's easy to unit test in isolation) — don't force patterns where they don't fit.
-- [ ] **Stretch — Prisma exposure (after M4, before M5) — SUPERSEDED**: real vacancies ask
-      for Prisma alongside NestJS/PostgreSQL (see `target-stack.md`). split-lab moved off
-      TypeORM onto Drizzle mid-M4 (developer's call, after checking real 2026 job-market data
-      on TypeORM/Prisma/Drizzle — Drizzle is gaining fastest for new projects, TypeORM stays
+- [ ] **Stretch — Prisma exposure (after M4, before M5)**: real vacancies ask for Prisma
+      alongside NestJS/PostgreSQL (see `target-stack.md`). split-lab moved off TypeORM onto
+      Drizzle mid-M4 (developer's call, after checking real 2026 job-market data on
+      TypeORM/Prisma/Drizzle — Drizzle is gaining fastest for new projects, TypeORM stays
       correct specifically for NestJS-enterprise, Prisma remains the most-adopted overall).
       Full rewrite onto a third ORM for one job-posting mention is still over-engineering —
       the bounded version below stands regardless of which ORM is primary. Pick ONE entity
@@ -32,13 +32,6 @@ planning the next one or checking what's still ahead.
       target list) AND gives real Prisma hands-on time, without touching
       Experiment/Variant/Event. Keep or delete the exercise afterward — not required to stay
       wired into the app.
-      **Superseded**: the developer explicitly overrode this bounded-exercise judgment call
-      and asked for a full Drizzle → Prisma rewrite across the whole data layer instead
-      (confirmed via AskUserQuestion after pushback — same one-time hand-over precedent as
-      the prior TypeORM → Drizzle swap). The reasoning above was sound at the time it was
-      written; it's kept here rather than deleted so the position that was actually held
-      isn't erased from the record. Prisma is now the primary ORM project-wide — see
-      `project-overview.md`'s second structural-change note and `data-layer.md`.
 - [ ] **M5 — Conversion tracking & results**: `POST /events` for conversions, an aggregation
       endpoint that returns per-variant exposure count, conversion count, conversion rate.
 - [ ] **M6 — Frontend wired to the real API**: replace the Angular boilerplate with a

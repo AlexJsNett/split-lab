@@ -97,7 +97,7 @@ Nest tutorial layout. Full convention and rationale: `.agents/guides/backend/api
 — read it before scaffolding M1, it decides where files go from the start.
 
 - `entities/<noun>/` (domain + infrastructure) for things with a table behind them; `features/<verb>/` for use-cases that read/write them. No top-level `controllers/`/`services/`/`dto/` buckets.
-- Prisma schema + migrations, no `db push` outside local scratch experiments.
+- Drizzle schemas + migrations, no `drizzle-kit push` outside local scratch experiments.
 - `class-validator` DTOs at the controller boundary — never trust raw request bodies past
   the DTO layer.
 - Async work (event ingestion) goes through a queue (BullMQ/Redis first, RabbitMQ once a
@@ -128,7 +128,7 @@ is the honest state, not a placeholder to ignore.
 - Project structure: `.agents/guides/project-overview.md`
 - NestJS core concepts (DI, decorators, modules — the "why"): `.agents/guides/backend/nestjs-concepts.md`
 - Back-end API patterns (NestJS/REST): `.agents/guides/backend/api-patterns.md`
-- Back-end data layer (Prisma/Postgres): `.agents/guides/backend/data-layer.md`
+- Back-end data layer (Drizzle/Postgres): `.agents/guides/backend/data-layer.md`
 - Back-end testing (Jest): `.agents/guides/backend/testing.md`
 - Security (OWASP Top 10 mapped to this project's actual surface): `.agents/guides/backend/security.md`
 - Async processing & messaging (BullMQ/RabbitMQ): `.agents/guides/backend/messaging.md`

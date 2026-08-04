@@ -1,23 +1,13 @@
 {
   "$schema": "https://turborepo.com/schema.json",
   "tasks": {
-    "db:generate": {
-      "cache": false,
-      "outputs": ["apps/api/generated/**"]
-    },
     "build": {
-      "dependsOn": ["^build", "db:generate"],
+      "dependsOn": ["^build"],
       "outputs": ["dist/**"]
     },
-    "lint": {
-      "dependsOn": ["db:generate"]
-    },
-    "typecheck": {
-      "dependsOn": ["db:generate"]
-    },
-    "test": {
-      "dependsOn": ["db:generate"]
-    },
+    "lint": {},
+    "typecheck": {},
+    "test": {},
     "dev": {
       "cache": false,
       "persistent": true

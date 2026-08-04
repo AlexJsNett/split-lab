@@ -11,18 +11,19 @@ export function assignVariant(
   userId: string,
   variants: VariantForAssignment[],
 ): VariantForAssignment {
-  // 1. const key = experimentId + ':' + userId;
+  const key = `${experimentId}:${userId}`;
+  const hash = createHash('md5').update(key).digest('hex');
+  const bucket = parseInt(hash.slice(0, 8), 16) % 100;
 
-  // 2. hash key через createHash('md5').update(key).digest('hex')
+  const sorted = [...variants].sort((a, b) => a.id.localeCompare(b.id));
 
-  // 3. взять кусок hex-строки, parseInt(..., 16) -> число
+  let cumulative = 0;
+  for (const variant of sorted) {
+    cumulative += variant.weight;
+    if (bucket < cumulative) {
+      return variant;
+    }
+  }
 
-  // 4. bucket = число % 100
-
-  // 5. отсортировать variants по id (копию массива, .slice() перед .sort() -
-  //    .sort() мутирует исходный массив, а variants пришёл снаружи функции)
-
-  // 6. цикл: cumulative += variant.weight, как только bucket < cumulative -> return variant
-
-  throw new Error('not implemented');
+  throw new Error('No variant matched bucket — weights do not sum to 100');
 }
