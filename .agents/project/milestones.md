@@ -13,25 +13,24 @@ planning the next one or checking what's still ahead.
 - [x] **M3 — Projects & Flags CRUD**: NestJS controllers/services/DTOs, `class-validator`
       input validation, meaningful error responses (RESTful conventions — status codes,
       resource-oriented routes).
-- [ ] **M4 — Experiments & assignment**: experiments + variants CRUD, the deterministic
+- [x] **M4 — Experiments & assignment**: experiments + variants CRUD, the deterministic
       assignment endpoint (`GET /experiments/:id/assign?userId=`), log an exposure event
       on assignment. Apply SOLID where it's actually warranted (e.g. an `AssignmentService`
       that's easy to unit test in isolation) — don't force patterns where they don't fit.
-- [ ] **Stretch — Prisma exposure (after M4, before M5)**: real vacancies ask for Prisma
-      alongside NestJS/PostgreSQL (see `target-stack.md`). split-lab moved off TypeORM onto
-      Drizzle mid-M4 (developer's call, after checking real 2026 job-market data on
-      TypeORM/Prisma/Drizzle — Drizzle is gaining fastest for new projects, TypeORM stays
-      correct specifically for NestJS-enterprise, Prisma remains the most-adopted overall).
-      Full rewrite onto a third ORM for one job-posting mention is still over-engineering —
-      the bounded version below stands regardless of which ORM is primary. Pick ONE entity
-      (`Project`), define a `ProjectRepositoryPort` interface in `domain/`, implement it
-      twice — `DrizzleProjectRepository` (already have the logic, just reshape it) and a
-      new `PrismaProjectRepository` (separate Prisma schema/client, scoped to this one
-      table) — wire whichever via `useClass`/a custom provider token in the module. Teaches
-      Dependency Inversion/Ports & Adapters concretely (a real SOLID principle, also on the
-      target list) AND gives real Prisma hands-on time, without touching
-      Experiment/Variant/Event. Keep or delete the exercise afterward — not required to stay
-      wired into the app.
+      Done: `AssignVariantService` + pure `assignVariant()` domain function (hash key →
+      bucket → cumulative-weight walk), full unit coverage (37 tests total across the API).
+- [x] **Stretch — Prisma exposure** — resolved differently than originally planned, but
+      done. The bounded ports-and-adapters version below was superseded mid-M4 by a full
+      Drizzle→Prisma rewrite (developer's explicit call, overriding the "one entity is
+      enough" reasoning) — real, tested, working Prisma code exists in git history at
+      commit `1450a07`. After hands-on time with it, developer found Prisma's generated-client
+      layer added real friction (`.js`-extension resolution, webpack/jest config workarounds)
+      compared to Drizzle's directness, and asked to revert — done at commit `0495928`, back
+      on Drizzle, which is what's running now. Net result: genuine Prisma exposure happened
+      (satisfies the `target-stack.md` line), informed opinion formed on the tradeoff, and
+      Drizzle stays primary. ~~Pick ONE entity (`Project`), define a `ProjectRepositoryPort`
+      interface in `domain/`, implement it twice...~~ — no longer needed, superseded by the
+      above.
 - [ ] **M5 — Conversion tracking & results**: `POST /events` for conversions, an aggregation
       endpoint that returns per-variant exposure count, conversion count, conversion rate.
 - [ ] **M6 — Frontend wired to the real API**: replace the Next.js boilerplate with a

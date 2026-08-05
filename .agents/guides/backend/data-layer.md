@@ -18,6 +18,14 @@ relation object/property the way TypeORM's `@ManyToOne` + `@JoinColumn` needed t
 explicitly asks for one (via its `relations()` API or a manual `.leftJoin(...)`) — the schema
 alone just declares the foreign key constraint for the database and for query type-checking.
 
+Why `() => projects.id` and not just `projects.id`: it's a lazy accessor, not the value
+itself. `projects.id` would need to be fully evaluated the moment this line runs — risky
+across separate schema files where import order isn't guaranteed and a genuine circular
+reference (two tables each referencing the other) would hit a "cannot access before
+initialization" error. `() => projects.id` is a function that returns the value only when
+*called* — Drizzle invokes it later, once every schema file has finished loading, so
+declaration order across files stops mattering.
+
 There is no per-entity module and no `forFeature`-style repository registration. A single
 `DrizzleModule` (`src/db/drizzle.module.ts`), marked `@Global()`, provides one DB client under
 a `DRIZZLE` injection token — every service that needs data access just

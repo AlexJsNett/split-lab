@@ -7,6 +7,8 @@ import { ManageFlagsModule } from '@/features/manage-flags/manage-flags.module';
 import { ManageVariantsModule } from '@/features/manage-variants/manage-variants.module';
 import { ManageExperimentsModule } from '@/features/manage-experiments/manage-experiments.module';
 import { AssignVariantModule } from '@/features/assign-variant/assign-variant.module';
+import { LogConversionModule } from '@/features/log-conversion/log-conversion.module';
+import { GetResultsModule } from '@/features/get-results/get-results.module';
 
 @Module({
   imports: [
@@ -20,6 +22,8 @@ import { AssignVariantModule } from '@/features/assign-variant/assign-variant.mo
     ManageVariantsModule,
     ManageExperimentsModule,
     AssignVariantModule,
+    LogConversionModule,
+    GetResultsModule,
   ],
   controllers: [HealthController],
 })
