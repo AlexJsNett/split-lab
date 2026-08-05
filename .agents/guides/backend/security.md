@@ -43,16 +43,26 @@ every consumer in the tree, not just the vulnerable path. Reverted that one spec
 Lesson: an override is a blunt instrument — verify the full test/lint/build suite after adding
 one, don't just re-run `pnpm audit` and call it done.
 
-**Deliberately left unfixed, for now:**
-- `multer` (high + moderate, via `@nestjs/platform-express`) — the patched version is a major
-  bump (`1.x` → `2.2.0`), real risk of breaking API changes. Not worth the risk since the app
-  doesn't use file uploads at all yet — revisit if/when a feature actually needs `multer`.
-- `@hono/node-server` (moderate, path traversal) — pulled in by `shadcn`'s CLI tooling
-  (`apps/web`'s component generator), not part of what actually ships or runs. Dev-tool-only,
-  lowest priority.
-
 **Still to do:** add `pnpm audit` as a CI step so new vulnerabilities in future dependency
 bumps get caught automatically instead of found by hand like this one was.
+
+**Update (2026-08-05), after the ORM/frontend churn this week (TypeORM→Drizzle→Prisma→
+Drizzle, Next.js→Angular→Next.js):** `pnpm audit` in CI (added as a non-blocking step, see
+`ci.yml`) now reports 9 findings, not the 2 tracked above at the time this section was first
+written. `@hono/node-server` is gone entirely — it was pulled in by the original `shadcn` CLI
+setup from the pre-Angular Next.js scaffold; the fresh `create-next-app` scaffold from the
+second Next.js swap doesn't have it. Current state:
+- `multer` (high + moderate, via `@nestjs/platform-express`) — same reasoning as before, still
+  accurate: unused feature (no file-upload endpoint exists), patch is a breaking major bump,
+  not worth taking until a real feature needs it.
+- 7 new findings, all **dev-tooling-only, never in the production build**: `brace-expansion`
+  (multiple advisories, via `eslint`/`jest`/`@nestjs/cli`'s transitive `minimatch` chains),
+  `esbuild` (via `drizzle-kit`'s migration CLI), `fast-uri` (via `@nestjs/cli`'s
+  `@angular-devkit` dependency). All are DoS-class findings that require an attacker to control
+  input fed into a dev/build-time tool (glob patterns, a locally-run dev server) — none of
+  these run in the deployed app or receive external requests. Same category as the old
+  `@hono/node-server` finding (accept, don't chase), just more of them now since drizzle-kit
+  (a devDependency) came back into the tree with the Prisma→Drizzle reversion.
 
 ## Deferred — exploit demo lands with the milestone that creates the surface
 
