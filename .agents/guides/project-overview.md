@@ -10,14 +10,13 @@ architecture snapshot, updated as milestones land.
 ```
 split-lab/
   apps/
-    web/   Angular — frontend ONLY. Talks to apps/api over HTTP. No DB access, no business logic.
+    web/   Next.js — frontend ONLY. Talks to apps/api over HTTP. No DB access, no business logic.
     api/   NestJS — backend. All domain logic, DB, auth, queues live here.
   .github/workflows/ci.yml
 ```
 
-- **`apps/web`** — Angular app (standalone components, Angular Router, built-in SSR), UI only.
-  Boilerplate until M6, then real screens. Port 4200 in dev (Angular's default; not 3000 —
-  don't confuse with `apps/api`'s port when both are running).
+- **`apps/web`** — Next.js app (App Router, TS, Tailwind), UI only. Boilerplate until M6,
+  then real screens. Port 3000 in dev.
 - **`apps/api`** — NestJS API server. Domain logic, DB, auth, queues. Tech choices, fixed by
   the target stack (not a free pick):
   - Framework: **NestJS** (modules/controllers/providers/DI — this structure is the point)

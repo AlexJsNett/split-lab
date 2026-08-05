@@ -15,7 +15,7 @@ install — see `pnpm-workspace.yaml`'s `allowBuilds` note below).
 pnpm install
 
 # Development (root-only script names, no ambiguity with workspace scripts)
-pnpm dev:web              # Angular dev server (apps/web)
+pnpm dev:web              # Next.js dev server (apps/web)
 pnpm dev:api              # NestJS dev server (apps/api)
 
 # Code quality — runs across every package that has the script, cached, skips the rest
@@ -76,7 +76,7 @@ Monorepo, npm workspaces, one root git repo.
 
 | Package    | What                                                              | Status                    |
 | ---------- | ------------------------------------------------------------------ | -------------------------- |
-| `apps/web` | Angular (standalone components, TS, built-in SSR) — UI only, no DB/logic | scaffolded (boilerplate)  |
+| `apps/web` | Next.js (App Router, TS) + Tailwind — UI only, no DB/logic          | scaffolded (boilerplate)  |
 | `apps/api` | NestJS — all domain logic, DB, auth, queues                         | M4 in progress (Projects/Flags/Variants/Experiments CRUD done) |
 
 Import boundary: `apps/web` talks to `apps/api` only over HTTP (fetch calls to REST
@@ -84,11 +84,11 @@ endpoints). It never imports backend code, never touches the DB directly.
 
 ### apps/web tooling
 
-Scaffolded via `ng new --ssr --style=css --routing` (Angular 22, standalone components — no
-`NgModule` boilerplate). No styling/state-management library picked yet — plain CSS for now,
-concrete choices (a component library, how server state gets fetched/cached — Angular's
-`HttpClient` + signals is the native fit, no React-Query-equivalent forced) deferred to M6
-when there are real screens to build against. Don't add either speculatively before M6.
+Scaffolded via `create-next-app` (TypeScript, App Router, Tailwind CSS, ESLint, no `src/`
+directory). No component library or server-state fetching approach picked yet — plain
+Tailwind for now, concrete choices (a component library, `fetch`/caching pattern against
+`apps/api`) deferred to M6 when there are real screens to build against. Don't add either
+speculatively before M6.
 
 ### apps/api (target shape, fills in per milestone)
 

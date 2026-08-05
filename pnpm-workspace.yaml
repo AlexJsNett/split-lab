@@ -4,16 +4,8 @@ allowBuilds:
   '@nestjs/core': false
   '@parcel/watcher': true
   esbuild: true
-  lmdb: true
-  msgpackr-extract: true
+  sharp: true
   unrs-resolver: true
-minimumReleaseAgeExclude:
-  - '@angular-devkit/architect@0.2200.9'
-  - '@angular-devkit/core@22.0.9'
-  - '@angular-devkit/schematics@22.0.9'
-  - '@angular/build@22.0.9'
-  - '@angular/cli@22.0.9'
-  - '@angular/ssr@22.0.9'
-  - '@schematics/angular@22.0.9'
 overrides:
   postcss: ">=8.5.18"
+  sharp: ">=0.35.0"

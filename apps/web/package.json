@@ -1,39 +1,28 @@
 {
   "name": "web",
-  "version": "0.0.0",
-  "scripts": {
-    "ng": "ng",
-    "dev": "ng serve",
-    "start": "ng serve",
-    "build": "ng build",
-    "watch": "ng build --watch --configuration development",
-    "test": "ng test",
-    "serve:ssr:web": "node dist/web/server/server.mjs"
-  },
+  "version": "0.1.0",
   "private": true,
-  "packageManager": "pnpm@11.17.0",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint"
+  },
   "dependencies": {
-    "@angular/common": "^22.0.0",
-    "@angular/compiler": "^22.0.0",
-    "@angular/core": "^22.0.0",
-    "@angular/forms": "^22.0.0",
-    "@angular/platform-browser": "^22.0.0",
-    "@angular/platform-server": "^22.0.0",
-    "@angular/router": "^22.0.0",
-    "@angular/ssr": "^22.0.9",
-    "express": "^5.1.0",
-    "rxjs": "~7.8.0",
-    "tslib": "^2.3.0"
+    "next": "16.3.0",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
+    "sharp": "^0.35.3"
   },
   "devDependencies": {
-    "@angular/build": "^22.0.9",
-    "@angular/cli": "^22.0.9",
-    "@angular/compiler-cli": "^22.0.0",
-    "@types/express": "^5.0.1",
-    "@types/node": "^20.17.19",
-    "jsdom": "^28.0.0",
-    "prettier": "^3.8.1",
-    "typescript": "~6.0.2",
-    "vitest": "^4.0.8"
-  }
+    "@tailwindcss/postcss": "^4",
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "eslint": "^9",
+    "eslint-config-next": "16.3.0",
+    "tailwindcss": "^4",
+    "typescript": "^5"
+  },
+  "packageManager": "pnpm@11.17.0"
 }

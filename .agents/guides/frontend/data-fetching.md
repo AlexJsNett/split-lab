@@ -1,23 +1,20 @@
 # Front-end Data Fetching
 
-Decided ahead of M6 so the provider is already in place when the real dashboard screens land.
-
-- **React Query** (`@tanstack/react-query`), not Redux. This app is a dashboard reading/writing
-  REST resources from `apps/api` — server state, which is exactly what Query handles
-  (caching, invalidation, refetch, loading/error states). No Redux-worthy client-only state
-  exists in this app yet; don't add it speculatively.
-- Provider: `src/app/providers.tsx`, wrapping `{children}` in `src/app/layout.tsx`. Devtools
-  (`ReactQueryDevtools`) mounted alongside it, closed by default.
-- shadcn/ui components live in `src/components/ui/` (added via
-  `npx shadcn@latest add <component>`, not hand-written) — use those before reaching for
-  Radix directly or writing a component from scratch.
+Not decided yet — `apps/web` is a fresh `create-next-app` scaffold (App Router, TS, Tailwind),
+no data-fetching or component library picked. Concrete choices deferred to M6, when there are
+real screens to build against (same "don't build ahead of the milestone that needs it" rule
+this project follows elsewhere). Next.js's App Router + React's native `fetch` (with Server
+Components doing reads server-side where it makes sense) is the likely default given no
+significant client-only state exists in this app yet — a dashboard reading/writing REST
+resources from `apps/api` doesn't obviously need Redux or a client cache library layered on
+top, but that call gets made at M6, not speculatively here.
 
 ## Fill in once M6 lands
 
-- Where the API base URL / fetch wrapper lives (a single `apiClient` used by every query/
-  mutation hook, not `fetch()` calls scattered through components).
-- Naming convention for query keys.
-- Where query hooks live — likely colocated per screen/feature rather than a global
-  `hooks/` bucket, to stay consistent with the screaming/FSD-ish approach on the backend.
+- Server Components + `fetch` vs. a client-side query/cache library (e.g. TanStack Query) —
+  pick based on how much of the dashboard ends up client-interactive.
+- Where the API base URL / fetch wrapper lives (a single `apiClient` used everywhere, not
+  `fetch()` calls scattered through components).
+- Component approach — hand-written vs. a library (shadcn/ui or similar) added on demand.
 - Loading/error state convention used across dashboard screens (skeletons? spinners?
-  shared `<QueryBoundary>` wrapper?).
+  shared boundary component?).
