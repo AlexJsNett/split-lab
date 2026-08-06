@@ -31,8 +31,12 @@ planning the next one or checking what's still ahead.
       Drizzle stays primary. ~~Pick ONE entity (`Project`), define a `ProjectRepositoryPort`
       interface in `domain/`, implement it twice...~~ — no longer needed, superseded by the
       above.
-- [ ] **M5 — Conversion tracking & results**: `POST /events` for conversions, an aggregation
+- [x] **M5 — Conversion tracking & results**: `POST /events` for conversions, an aggregation
       endpoint that returns per-variant exposure count, conversion count, conversion rate.
+      Done: `log-conversion` (`POST /projects/:projectId/experiments/:id/conversions`, reuses
+      the variantId from the user's prior exposure event) and `get-results`
+      (`GET /projects/:projectId/experiments/:id/results`, `count()`+`groupBy()` aggregation,
+      zero-fills variants with no events), full unit coverage.
 - [ ] **M6 — Frontend wired to the real API**: replace the Next.js boilerplate with a
       dashboard that lists projects/flags/experiments and shows results. Frontend stays
       dumb — no logic beyond what the dashboard actually needs.
