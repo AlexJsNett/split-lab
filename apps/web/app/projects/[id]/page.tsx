@@ -5,7 +5,7 @@ import {
   type Experiment,
   type FeatureFlag,
   type Project,
-} from "@/app/_lib/api";
+} from "@/app/_shared/lib/api";
 import {
   Table,
   TableBody,
@@ -13,8 +13,8 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from "@/components/ui/table";
-import { Badge } from "@/components/ui/badge";
+} from "@/app/_shared/ui/table";
+import { Badge } from "@/app/_shared/ui/badge";
 
 export default async function ProjectDetailPage(
   props: PageProps<"/projects/[id]">,

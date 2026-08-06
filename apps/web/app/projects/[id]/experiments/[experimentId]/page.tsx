@@ -5,7 +5,7 @@ import {
   type Experiment,
   type Variant,
   type VariantResult,
-} from "@/app/_lib/api";
+} from "@/app/_shared/lib/api";
 import {
   Table,
   TableBody,
@@ -13,9 +13,9 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from "@/components/ui/table";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
+} from "@/app/_shared/ui/table";
+import { Card, CardContent, CardHeader, CardTitle } from "@/app/_shared/ui/card";
+import { Badge } from "@/app/_shared/ui/badge";
 
 function formatPercent(rate: number): string {
   return `${(rate * 100).toFixed(1)}%`;

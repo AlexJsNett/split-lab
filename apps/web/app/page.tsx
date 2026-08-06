@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { apiFetch, type Project } from "@/app/_lib/api";
+import { apiFetch, type Project } from "@/app/_shared/lib/api";
 import {
   Table,
   TableBody,
@@ -7,7 +7,7 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from "@/components/ui/table";
+} from "@/app/_shared/ui/table";
 
 export default async function Home() {
   const projects = await apiFetch<Project[]>("/projects");
