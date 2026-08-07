@@ -82,6 +82,27 @@ planning the next one or checking what's still ahead.
       GrowthBook's layout/approach as closely as practical to learn from it first; diverge
       once you have your own ideas about what's missing or worth doing differently.
 
+## Backlog — not tied to a specific milestone yet
+
+- **`apps/web` e2e tests (Playwright)**: real browser hitting a real running `pnpm dev:web` →
+  `pnpm dev:api` → Postgres — not unit tests, since the current pages are Server Components
+  with zero branching/logic (fetch + render), where unit tests would just be testing
+  React/Next.js itself. Low ROI right now with only 3 read-only pages from M6's first pass —
+  revisit once there's more UI (especially once forms/mutations exist, where there's actual
+  logic worth covering). This is the deploy-time check — runs once per change, against the
+  test DB, same shape as `apps/api`'s own `test:e2e`.
+- **Production synthetic monitoring** (belongs with M14, once a real AWS prod environment
+  exists — doesn't apply yet, there's no prod, only local dev + `splitlab_test`): a scheduled
+  job (every few minutes) running a full-journey script against the *real* prod system —
+  signup → log out → log in → exercise a small **critical/golden-path** subset of
+  functionality (not the whole app — keep this fast and cheap to run continuously, unlike the
+  exhaustive e2e suite) → delete the account. Two safety requirements: (1) the synthetic
+  account needs an identifiable pattern (e.g. `synthetic-monitor+<timestamp>@...`) plus a
+  separate cleanup sweep job, so a mid-run crash before the delete step doesn't leave junk
+  data behind; (2) this is layered on top of, not instead of, a plain `GET /health` heartbeat
+  check (already exists from M1) — health check is cheap/frequent, full-journey synthetic is
+  heavier/less frequent.
+
 Not a milestone, an ongoing habit: every milestone above should go through Claude Code for
 review/refactor/tests/docs at some point — that's the "daily AI-assisted workflow" line from
 the target list, and it's already how this project works.
