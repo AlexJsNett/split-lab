@@ -16,6 +16,9 @@ import {
 } from "@/app/_shared/ui/table";
 import { Badge } from "@/app/_shared/ui/badge";
 
+// Always fetches live data — never statically prerenderable, see app/page.tsx.
+export const dynamic = "force-dynamic";
+
 export default async function ProjectDetailPage(
   props: PageProps<"/projects/[id]">,
 ) {

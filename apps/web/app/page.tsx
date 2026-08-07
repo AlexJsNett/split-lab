@@ -9,6 +9,11 @@ import {
   TableRow,
 } from "@/app/_shared/ui/table";
 
+// Always fetches live data from the real API (see api.ts's cache: "no-store")
+// — never statically prerenderable, and CI has no running API to prerender
+// against anyway.
+export const dynamic = "force-dynamic";
+
 export default async function Home() {
   const projects = await apiFetch<Project[]>("/projects");
 

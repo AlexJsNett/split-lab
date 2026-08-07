@@ -17,6 +17,9 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from "@/app/_shared/ui/card";
 import { Badge } from "@/app/_shared/ui/badge";
 
+// Always fetches live data — never statically prerenderable, see app/page.tsx.
+export const dynamic = "force-dynamic";
+
 function formatPercent(rate: number): string {
   return `${(rate * 100).toFixed(1)}%`;
 }
