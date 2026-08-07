@@ -10,10 +10,12 @@ import {
   Patch,
   Post,
 } from '@nestjs/common';
+import { ProjectIdParam } from '@/shared/decorators/project-id-param.decorator';
 import { ManageExperimentsService } from './manage-experiments.service';
 import { CreateExperimentDto } from './dto/create-experiment.dto';
 import { UpdateExperimentDto } from './dto/update-experiment.dto';
 
+@ProjectIdParam('projectId')
 @Controller('projects/:projectId/experiments')
 export class ManageExperimentsController {
   constructor(

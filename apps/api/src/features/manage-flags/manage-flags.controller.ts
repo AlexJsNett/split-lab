@@ -10,10 +10,12 @@ import {
   Patch,
   Post,
 } from '@nestjs/common';
+import { ProjectIdParam } from '@/shared/decorators/project-id-param.decorator';
 import { ManageFlagsService } from './manage-flags.service';
 import { CreateFeatureFlagDto } from './dto/create-feature-flag.dto';
 import { UpdateFeatureFlagDto } from './dto/update-feature-flag.dto';
 
+@ProjectIdParam('projectId')
 @Controller('projects/:projectId/flags')
 export class ManageFlagsController {
   constructor(private readonly manageFlagsService: ManageFlagsService) {}

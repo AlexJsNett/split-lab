@@ -1,7 +1,9 @@
 import { Controller, Get, Param, ParseUUIDPipe, Query } from '@nestjs/common';
+import { ProjectIdParam } from '@/shared/decorators/project-id-param.decorator';
 import { AssignVariantService } from './assign-variant.service';
 import { AssignVariantQueryDto } from './dto/assign-variant-query.dto';
 
+@ProjectIdParam('projectId')
 @Controller('projects/:projectId/experiments/:id/assign')
 export class AssignVariantController {
   constructor(private readonly assignVariantService: AssignVariantService) {}

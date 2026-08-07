@@ -1,5 +1,5 @@
 import { Test } from '@nestjs/testing';
-import { NotFoundException } from '@nestjs/common';
+import { ForbiddenException, NotFoundException } from '@nestjs/common';
 import { DRIZZLE } from '@/db/drizzle.module';
 import { ManageVariantsService } from './manage-variants.service';
 
@@ -63,6 +63,14 @@ function mockDelete(db: MockDb, resolvedRows: unknown[]) {
   });
 }
 
+const ownedExperiment = {
+  id: 'experiment-1',
+  projectId: 'project-1',
+  flagId: null,
+  name: 'X',
+  status: 'draft',
+};
+
 describe('ManageVariantsService', () => {
   let service: ManageVariantsService;
   let db: MockDb;
@@ -81,21 +89,27 @@ describe('ManageVariantsService', () => {
     it('throws NotFoundException when experiment does not exist', async () => {
       mockSelectWhere(db, []);
       await expect(
-        service.create('missing-experiment', { key: 'control', weight: 50 }),
+        service.create('project-1', 'missing-experiment', {
+          key: 'control',
+          weight: 50,
+        }),
       ).rejects.toThrow(NotFoundException);
       expect(db.insert).not.toHaveBeenCalled();
     });
 
-    it('saves the variant scoped to the experiment when it exists', async () => {
-      mockSelectWhere(db, [
-        {
-          id: 'experiment-1',
-          projectId: 'project-1',
-          flagId: null,
-          name: 'X',
-          status: 'draft',
-        },
-      ]);
+    it('throws ForbiddenException when the experiment belongs to another project', async () => {
+      mockSelectWhere(db, [ownedExperiment]);
+      await expect(
+        service.create('someone-elses-project', 'experiment-1', {
+          key: 'control',
+          weight: 50,
+        }),
+      ).rejects.toThrow(ForbiddenException);
+      expect(db.insert).not.toHaveBeenCalled();
+    });
+
+    it('saves the variant scoped to the experiment when it exists and is owned', async () => {
+      mockSelectWhere(db, [ownedExperiment]);
       const valuesFn = mockInsert<{ experimentId: string; key: string }>(db, [
         {
           id: 'variant-1',
@@ -105,7 +119,7 @@ describe('ManageVariantsService', () => {
         },
       ]);
 
-      const result = await service.create('experiment-1', {
+      const result = await service.create('project-1', 'experiment-1', {
         key: 'control',
         weight: 50,
       });
@@ -118,30 +132,66 @@ describe('ManageVariantsService', () => {
   describe('findAll', () => {
     it('throws NotFoundException when experiment does not exist', async () => {
       mockSelectWhere(db, []);
-      await expect(service.findAll('missing-experiment')).rejects.toThrow(
-        NotFoundException,
-      );
+      await expect(
+        service.findAll('project-1', 'missing-experiment'),
+      ).rejects.toThrow(NotFoundException);
+    });
+
+    it('throws ForbiddenException when the experiment belongs to another project', async () => {
+      mockSelectWhere(db, [ownedExperiment]);
+      await expect(
+        service.findAll('someone-elses-project', 'experiment-1'),
+      ).rejects.toThrow(ForbiddenException);
     });
   });
 
   describe('findOne', () => {
-    it('throws NotFoundException when variant does not exist in that experiment', async () => {
+    it('throws NotFoundException when experiment does not exist', async () => {
       mockSelectWhere(db, []);
       await expect(
-        service.findOne('experiment-1', 'missing-id'),
+        service.findOne('project-1', 'missing-experiment', 'variant-1'),
+      ).rejects.toThrow(NotFoundException);
+    });
+
+    it('throws ForbiddenException when the experiment belongs to another project', async () => {
+      mockSelectWhere(db, [ownedExperiment]);
+      await expect(
+        service.findOne('someone-elses-project', 'experiment-1', 'variant-1'),
+      ).rejects.toThrow(ForbiddenException);
+    });
+
+    it('throws NotFoundException when variant does not exist in that experiment', async () => {
+      mockSelectWhere(db, [ownedExperiment]);
+      mockSelectWhere(db, []);
+      await expect(
+        service.findOne('project-1', 'experiment-1', 'missing-id'),
       ).rejects.toThrow(NotFoundException);
     });
   });
 
   describe('update', () => {
+    it('throws ForbiddenException when the experiment belongs to another project', async () => {
+      mockSelectWhere(db, [ownedExperiment]);
+      await expect(
+        service.update('someone-elses-project', 'experiment-1', 'variant-1', {
+          weight: 60,
+        }),
+      ).rejects.toThrow(ForbiddenException);
+      expect(db.update).not.toHaveBeenCalled();
+    });
+
     it('throws NotFoundException when variant does not exist in that experiment', async () => {
+      mockSelectWhere(db, [ownedExperiment]);
       mockUpdate(db, []);
       await expect(
-        service.update('experiment-1', 'missing-id', { weight: 60 }),
+        service.update('project-1', 'experiment-1', 'missing-id', {
+          weight: 60,
+        }),
       ).rejects.toThrow(NotFoundException);
     });
 
     it('merges the dto onto the existing variant and saves it', async () => {
+      mockSelectWhere(db, [ownedExperiment]);
       mockUpdate(db, [
         {
           id: 'variant-1',
@@ -151,9 +201,12 @@ describe('ManageVariantsService', () => {
         },
       ]);
 
-      const result = await service.update('experiment-1', 'variant-1', {
-        weight: 60,
-      });
+      const result = await service.update(
+        'project-1',
+        'experiment-1',
+        'variant-1',
+        { weight: 60 },
+      );
 
       expect(result.weight).toBe(60);
       expect(result.key).toEqual('control');
@@ -161,14 +214,24 @@ describe('ManageVariantsService', () => {
   });
 
   describe('remove', () => {
+    it('throws ForbiddenException when the experiment belongs to another project', async () => {
+      mockSelectWhere(db, [ownedExperiment]);
+      await expect(
+        service.remove('someone-elses-project', 'experiment-1', 'variant-1'),
+      ).rejects.toThrow(ForbiddenException);
+      expect(db.delete).not.toHaveBeenCalled();
+    });
+
     it('throws NotFoundException when nothing was deleted', async () => {
+      mockSelectWhere(db, [ownedExperiment]);
       mockDelete(db, []);
       await expect(
-        service.remove('experiment-1', 'missing-id'),
+        service.remove('project-1', 'experiment-1', 'missing-id'),
       ).rejects.toThrow(NotFoundException);
     });
 
     it('resolves when a row was deleted', async () => {
+      mockSelectWhere(db, [ownedExperiment]);
       mockDelete(db, [
         {
           id: 'variant-1',
@@ -178,7 +241,7 @@ describe('ManageVariantsService', () => {
         },
       ]);
       await expect(
-        service.remove('experiment-1', 'variant-1'),
+        service.remove('project-1', 'experiment-1', 'variant-1'),
       ).resolves.toBeUndefined();
     });
   });

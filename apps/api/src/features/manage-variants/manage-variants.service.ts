@@ -2,7 +2,12 @@ import { DRIZZLE } from '@/db/drizzle.module';
 import * as schema from '@/db/schema';
 import { variants } from '@/entities/variant/infrastructure/variant.schema';
 import { experiments } from '@/entities/experiment/infrastructure/experiment.schema';
-import { Inject, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  ForbiddenException,
+  Inject,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { and, eq } from 'drizzle-orm';
 import { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import { CreateVariantDto } from './dto/create-variant.dto';
@@ -14,8 +19,12 @@ export class ManageVariantsService {
     @Inject(DRIZZLE) private readonly db: NodePgDatabase<typeof schema>,
   ) {}
 
-  async create(experimentId: string, dto: CreateVariantDto) {
-    await this.assertExperimentExists(experimentId);
+  async create(
+    authenticatedProjectId: string,
+    experimentId: string,
+    dto: CreateVariantDto,
+  ) {
+    await this.assertExperimentExists(authenticatedProjectId, experimentId);
 
     const [variant] = await this.db
       .insert(variants)
@@ -24,15 +33,21 @@ export class ManageVariantsService {
     return variant;
   }
 
-  async findAll(experimentId: string) {
-    await this.assertExperimentExists(experimentId);
+  async findAll(authenticatedProjectId: string, experimentId: string) {
+    await this.assertExperimentExists(authenticatedProjectId, experimentId);
     return this.db
       .select()
       .from(variants)
       .where(eq(variants.experimentId, experimentId));
   }
 
-  async findOne(experimentId: string, id: string) {
+  async findOne(
+    authenticatedProjectId: string,
+    experimentId: string,
+    id: string,
+  ) {
+    await this.assertExperimentExists(authenticatedProjectId, experimentId);
+
     const [variant] = await this.db
       .select()
       .from(variants)
@@ -43,7 +58,14 @@ export class ManageVariantsService {
     return variant;
   }
 
-  async update(experimentId: string, id: string, dto: UpdateVariantDto) {
+  async update(
+    authenticatedProjectId: string,
+    experimentId: string,
+    id: string,
+    dto: UpdateVariantDto,
+  ) {
+    await this.assertExperimentExists(authenticatedProjectId, experimentId);
+
     const [variant] = await this.db
       .update(variants)
       .set(dto)
@@ -55,7 +77,13 @@ export class ManageVariantsService {
     return variant;
   }
 
-  async remove(experimentId: string, id: string) {
+  async remove(
+    authenticatedProjectId: string,
+    experimentId: string,
+    id: string,
+  ) {
+    await this.assertExperimentExists(authenticatedProjectId, experimentId);
+
     const deleted = await this.db
       .delete(variants)
       .where(and(eq(variants.id, id), eq(variants.experimentId, experimentId)))
@@ -65,13 +93,21 @@ export class ManageVariantsService {
     }
   }
 
-  private async assertExperimentExists(experimentId: string) {
+  private async assertExperimentExists(
+    authenticatedProjectId: string,
+    experimentId: string,
+  ) {
     const [experiment] = await this.db
       .select()
       .from(experiments)
       .where(eq(experiments.id, experimentId));
     if (!experiment) {
       throw new NotFoundException(`Experiment ${experimentId} not found`);
+    }
+    if (experiment.projectId !== authenticatedProjectId) {
+      throw new ForbiddenException(
+        'This API key does not have access to that experiment',
+      );
     }
   }
 }
