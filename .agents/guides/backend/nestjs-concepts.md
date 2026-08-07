@@ -114,7 +114,49 @@ single shared DB client used everywhere is exactly the "used almost universally"
 undo the "module boundaries are enforced" property described above — this is the one exception,
 not the default.
 
-## Terms to fill in as they come up
+## Guards + `APP_GUARD` (the `ApiKeyGuard` pattern, M7)
 
-- Guards / Pipes / Interceptors — same decorator+metadata mechanism, different hook points
-  in the request lifecycle. Fill in once M7 (auth guard) lands.
+A guard is a class implementing `CanActivate` — one method, `canActivate(context)`, returning
+(or resolving to) `true`/`false`. Nest runs it **before** the matched route handler; return
+`false` (or throw) and the handler never executes at all — the controller method's body never
+runs, the request never touches business logic.
+
+Applying a guard to one controller is `@UseGuards(SomeGuard)` on that class. `ApiKeyGuard`
+needs to run on *every* route in the app, so it's registered differently — as a provider under
+the special `APP_GUARD` token in `AppModule`:
+```ts
+providers: [{ provide: APP_GUARD, useClass: ApiKeyGuard }],
+```
+`APP_GUARD` isn't a token this project invented (unlike `DRIZZLE`, a plain `Symbol` we made up
+ourselves) — it comes from `@nestjs/core`, and Nest's DI container specifically recognizes it:
+a provider registered under this token is automatically wired as a **global** guard, run on
+every request, without `@UseGuards()` on each controller (and without the risk of forgetting
+it on a new one).
+
+Skipping the guard on specific routes (`POST /projects`, the one endpoint that has to work
+*without* an API key — there's no key to send before a project exists) uses `Reflector` +
+custom metadata, the same decorator+metadata mechanism `@Roles()`-style guards use everywhere
+in the Nest ecosystem:
+```ts
+export const IS_PUBLIC_KEY = 'isPublic';
+export const Public = () => SetMetadata(IS_PUBLIC_KEY, true);
+```
+`@SetMetadata(key, value)` attaches an arbitrary tag to a route handler (or a whole
+controller) — it doesn't do anything by itself, it just stores the tag where a guard can read
+it later via `Reflector`:
+```ts
+const isPublic = this.reflector.getAllAndOverride<boolean>(IS_PUBLIC_KEY, [
+  context.getHandler(),
+  context.getClass(),
+]);
+```
+`getAllAndOverride` checks the specific method first (`getHandler()`), then falls back to the
+controller class (`getClass()`) — so `@Public()` can be put on one method or on a whole
+controller. `ExecutionContext` (the `canActivate(context)` parameter) is what makes a guard
+work across HTTP/WebSockets/RPC uniformly — `context.switchToHttp().getRequest()` is the
+HTTP-specific way of getting the actual `Request` object once you know you're in an HTTP
+context (this project never needs the other transports, but the API shape assumes they might
+exist).
+
+- Pipes / Interceptors — same decorator+metadata mechanism, different hook points in the
+  request lifecycle. Still unfilled — land here whenever the project actually uses one.

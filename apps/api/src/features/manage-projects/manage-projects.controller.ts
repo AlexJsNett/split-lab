@@ -10,6 +10,7 @@ import {
   Patch,
   Post,
 } from '@nestjs/common';
+import { Public } from '@/shared/decorators/public.decorator';
 import { ManageProjectsService } from './manage-projects.service';
 import { CreateProjectDto } from './dto/create-project.dto';
 import { UpdateProjectDto } from './dto/update-project.dto';
@@ -18,6 +19,7 @@ import { UpdateProjectDto } from './dto/update-project.dto';
 export class ManageProjectsController {
   constructor(private readonly manageProjectsService: ManageProjectsService) {}
 
+  @Public()
   @Post()
   create(@Body() dto: CreateProjectDto) {
     return this.manageProjectsService.create(dto);

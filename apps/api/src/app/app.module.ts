@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
-import { HealthController } from './health.controller';
+import { APP_GUARD } from '@nestjs/core';
 import { ConfigModule } from '@nestjs/config';
+import { ApiKeyGuard } from '@/shared/guards/api-key.guard';
 import { DrizzleModule } from '@/db/drizzle.module';
 import { ManageProjectsModule } from '@/features/manage-projects/manage-projects.module';
 import { ManageFlagsModule } from '@/features/manage-flags/manage-flags.module';
@@ -25,6 +26,6 @@ import { GetResultsModule } from '@/features/get-results/get-results.module';
     LogConversionModule,
     GetResultsModule,
   ],
-  controllers: [HealthController],
+  providers: [{ provide: APP_GUARD, useClass: ApiKeyGuard }],
 })
 export class AppModule {}
