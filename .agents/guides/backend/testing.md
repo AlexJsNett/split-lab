@@ -55,8 +55,29 @@ Drizzle would generate.
 `test/*.e2e-spec.ts`, run via `pnpm run test:e2e` — boots the actual `AppModule` (real
 `DrizzleModule`, real Postgres in Docker) and hits routes through `supertest`.
 Used sparingly (per `AGENTS.md`'s testing policy, these complement rather than replace unit
-tests) — currently just the M1 health check. Expand as controllers land, one happy-path e2e
-per resource is enough; edge cases and branching belong in the unit tests above.
+tests) — one happy-path e2e per resource is enough; edge cases and branching belong in the
+unit tests above. Landed in M8: `projects`, `flags`, `auth`, `experiment-lifecycle`.
+
+`test/support/test-app.ts` is the shared helper every spec file uses — `createTestApp()`
+boots a real `INestApplication` with the same `ValidationPipe` options `main.ts` uses (e2e
+tests never run through `main.ts`'s `bootstrap()`, so this has to be set up by hand or DTO
+validation silently doesn't happen), `cleanDatabase()` truncates all 5 tables in one
+statement between tests, `createTestProject()` calls the real `POST /projects` endpoint to
+get a project + API key rather than inserting rows directly — that way every spec exercises
+the same creation path a real client would use, not a DB shortcut.
+
+**Two things had to be fixed to make a multi-file e2e suite actually work, not just a single
+file:**
+- `DrizzleModule` never closed its `pg.Pool` on shutdown — a single long-running server
+  process never noticed, but each e2e file's `app.close()` left a dangling open connection,
+  which is exactly what made a 1-file suite look fine and a 4-file suite hang. Fixed by
+  giving `DrizzleModule` an `OnModuleDestroy` hook that calls `pool.end()`.
+- All e2e files share the *same* `splitlab_test` database. Jest defaults to running test
+  files in parallel workers — with a shared real database, one file's `beforeEach` `TRUNCATE`
+  can wipe rows a different file's test is mid-way through using, producing flaky/wrong
+  status codes that have nothing to do with the code under test. `test:e2e` runs
+  `--runInBand` (one worker, files run sequentially) specifically because of this — it's not
+  a performance knob, it's the thing that makes the DB-sharing model correct at all.
 
 **Not the same database as manual dev testing.** e2e tests hit a real Postgres, but a
 dedicated one (`splitlab_test`), never the `splitlab` database you `curl` against by hand —

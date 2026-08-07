@@ -37,15 +37,33 @@ planning the next one or checking what's still ahead.
       the variantId from the user's prior exposure event) and `get-results`
       (`GET /projects/:projectId/experiments/:id/results`, `count()`+`groupBy()` aggregation,
       zero-fills variants with no events), full unit coverage.
-- [ ] **M6 — Frontend wired to the real API**: replace the Next.js boilerplate with a
+- [x] **M6 — Frontend wired to the real API**: replace the Next.js boilerplate with a
       dashboard that lists projects/flags/experiments and shows results. Frontend stays
       dumb — no logic beyond what the dashboard actually needs.
-- [ ] **M7 — Auth**: API key guard in Nest (the `Project.apiKey` field already fits this),
+      Done: read-only dashboard (`/`, `/projects/[id]`, `/projects/[id]/experiments/[id]`),
+      shadcn table/badge/card, `app/_shared/{ui,lib}` FSD layer, server-component `fetch`,
+      no auth/forms yet (M7 added auth after).
+- [x] **M7 — Auth**: API key guard in Nest (the `Project.apiKey` field already fits this),
       reject unauthenticated requests.
-- [ ] **M8 — Tests**: Jest unit tests, starting with the assignment/bucketing logic since
+      Done: `ApiKeyGuard` (global via `APP_GUARD`, `x-api-key` header, sha256 hash lookup,
+      `@Public()` bypass) + `ProjectOwnershipGuard` (IDOR protection, `@ProjectIdParam()`
+      metadata, `@AuthProject()` param decorator), `GET /projects` scoped to caller's own
+      project, full unit coverage on both guards (62/62 tests total).
+- [x] **M8 — Tests**: Jest unit tests, starting with the assignment/bucketing logic since
       it's the trickiest bit to get right. Add a couple of e2e tests with Nest's test utils.
       (Note: as of the 100% coverage policy, tests land alongside every milestone, not
       deferred to here — this milestone is really "close any remaining gaps.")
+      Done: unit coverage was already complete from prior milestones (62/62). This milestone
+      closed the actual gap — real e2e coverage. The M1-era stale `/health` e2e spec (route
+      deleted in M7) got replaced with 4 real spec files hitting the actual `AppModule` +
+      `splitlab_test` Postgres through `supertest`: `projects`, `flags`, `auth` (guards
+      through real HTTP, not mocked `ExecutionContext`), `experiment-lifecycle` (variants ->
+      assign -> conversion -> results golden path). Found and fixed a real bug along the way:
+      `DrizzleModule` never closed its `pg.Pool` on shutdown — harmless for a long-running
+      server, but left e2e test files hanging on an open handle. `test:e2e` now runs
+      `--runInBand`, since all 4 files share one real database and Jest's default parallel
+      workers raced each other's `TRUNCATE`s otherwise. 13/13 e2e passing, 75 tests total
+      across the API.
 - [ ] **M9 — Redis + async events**: move event ingestion off the request/response path —
       publish exposure/conversion events to a Redis-backed BullMQ queue, process them in a
       worker. This is the "asynchronous processing" line from the target list.
