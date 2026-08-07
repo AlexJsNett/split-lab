@@ -37,12 +37,6 @@ function mockInsert<Values extends Record<string, unknown>>(
   return valuesFn;
 }
 
-function mockSelectFrom(db: MockDb, resolvedRows: unknown[]) {
-  db.select.mockReturnValueOnce({
-    from: jest.fn().mockResolvedValue(resolvedRows),
-  });
-}
-
 function mockSelectWhere(db: MockDb, resolvedRows: unknown[]) {
   db.select.mockReturnValueOnce({
     from: jest.fn().mockReturnValue({
@@ -99,18 +93,20 @@ describe('ManageProjectsService', () => {
   });
 
   describe('findAll', () => {
-    it('never returns apiKeyHash for any project', async () => {
-      mockSelectFrom(db, [
-        { id: '1', name: 'X', apiKeyHash: 'hash-1' },
-        { id: '2', name: 'Y', apiKeyHash: 'hash-2' },
-      ]);
+    it('only returns the authenticated project, never apiKeyHash', async () => {
+      mockSelectWhere(db, [{ id: '1', name: 'X', apiKeyHash: 'hash-1' }]);
 
-      const result = await service.findAll();
+      const result = await service.findAll('1');
 
-      expect(result).toEqual([
-        { id: '1', name: 'X' },
-        { id: '2', name: 'Y' },
-      ]);
+      expect(result).toEqual([{ id: '1', name: 'X' }]);
+    });
+
+    it('returns an empty array if the authenticated project somehow is not found', async () => {
+      mockSelectWhere(db, []);
+
+      const result = await service.findAll('missing-id');
+
+      expect(result).toEqual([]);
     });
   });
 

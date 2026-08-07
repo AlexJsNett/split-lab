@@ -27,8 +27,11 @@ export class ManageProjectsService {
     return { ...this.toResponse(project), apiKey };
   }
 
-  async findAll() {
-    const rows = await this.db.select().from(projects);
+  async findAll(authenticatedProjectId: string) {
+    const rows = await this.db
+      .select()
+      .from(projects)
+      .where(eq(projects.id, authenticatedProjectId));
     return rows.map((project) => this.toResponse(project));
   }
 

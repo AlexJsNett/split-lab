@@ -12,6 +12,8 @@ import {
 } from '@nestjs/common';
 import { Public } from '@/shared/decorators/public.decorator';
 import { ProjectIdParam } from '@/shared/decorators/project-id-param.decorator';
+import { AuthProject } from '@/shared/decorators/auth-project.decorator';
+import type { Project } from '@/entities/project/domain/project';
 import { ManageProjectsService } from './manage-projects.service';
 import { CreateProjectDto } from './dto/create-project.dto';
 import { UpdateProjectDto } from './dto/update-project.dto';
@@ -26,12 +28,12 @@ export class ManageProjectsController {
     return this.manageProjectsService.create(dto);
   }
 
-  // NOTE: findAll() still returns every project in the system, regardless of
-  // which API key is calling — @ProjectIdParam can't fix this (no :id in this
-  // route to compare against). Flagged as an open question, not fixed here.
+  // Scoped to the authenticated project's own id — a key only ever "lists"
+  // the one project it belongs to. Still an array (not a single object) to
+  // keep the route/response shape stable if multi-project keys ever exist.
   @Get()
-  findAll() {
-    return this.manageProjectsService.findAll();
+  findAll(@AuthProject() project: Project) {
+    return this.manageProjectsService.findAll(project.id);
   }
 
   @ProjectIdParam('id')
