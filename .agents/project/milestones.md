@@ -100,6 +100,32 @@ planning the next one or checking what's still ahead.
       GrowthBook's layout/approach as closely as practical to learn from it first; diverge
       once you have your own ideas about what's missing or worth doing differently.
 
+- [ ] **M17 — MCP server**: expose split-lab's data (projects, flags, experiments, variants,
+      results) as MCP tools/resources, so an MCP-compatible AI client (Claude Desktop, Claude
+      Code, Cursor, or the in-app chat from M18) can query analytics data directly instead of
+      through the REST API by hand. Start read-only (list projects, get experiment results,
+      check a flag's rollout) — writes (create a flag, start an experiment) are a deliberate
+      stretch, not the M17 baseline, since an AI-triggered mutation needs more thought about
+      confirmation/scoping than a read does. **Not from `target-stack.md`** — unlike M9–M16,
+      this doesn't map to a job-requirement line (the AI-related lines there are about *you*
+      using AI assistants day-to-day, already closed; this is a product feature). This is your
+      own direction: growing split-lab from "GrowthBook clone" toward "GrowthBook +
+      Amplitude's built-in AI chat" — worth being explicit that the motivation is different
+      from every other milestone in this list.
+- [ ] **M18 — In-app AI chat**: a slide-out chat panel in `apps/web`'s admin dashboard (open
+      from the side, like Amplitude's), backed by an LLM on the API side that answers
+      questions about the signed-in project's data ("how's the checkout experiment doing",
+      "which flags are enabled") by calling the same M17 MCP tools server-side — a tool-calling
+      loop, not a raw unstructured prompt. Each user supplies their **own** LLM API key
+      (OpenAI/Anthropic/etc — bring-your-own-key), so split-lab itself never pays for or rate-
+      limits anyone's usage. **Security note to get right when this lands**: an LLM key is not
+      the same shape as `Project.apiKeyHash` — the project's own API key only ever needs to be
+      *compared* (hash it, compare hashes, never need the original back), but an LLM key has to
+      be *used* — sent to OpenAI/Anthropic on the user's behalf — so it must be **encrypted at
+      rest, not hashed** (reversible, e.g. AES via a server-held secret), still never returned
+      in any API response after the initial save. Don't copy the `apiKeyHash` pattern here by
+      reflex, the two have different requirements.
+
 ## Backlog — not tied to a specific milestone yet
 
 - **`apps/web` e2e tests (Playwright)**: real browser hitting a real running `pnpm dev:web` →
