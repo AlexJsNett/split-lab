@@ -6,6 +6,7 @@ import {
   createTestApp,
   createTestProject,
   TestProject,
+  waitForQueueDrain,
 } from './support/test-app';
 
 interface VariantResult {
@@ -129,6 +130,10 @@ describe('Experiment lifecycle: variants -> assign -> conversion -> results (e2e
       .set('x-api-key', project.apiKey)
       .send({ userId: 'never-exposed' })
       .expect(400);
+
+    // /results reads straight from Postgres — wait for the worker to drain
+    // the exposure/conversion jobs queued above before asserting on it.
+    await waitForQueueDrain(app);
 
     const resultsResponse = await request(app.getHttpServer())
       .get(`/projects/${project.id}/experiments/${experiment.id}/results`)

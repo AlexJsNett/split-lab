@@ -4,6 +4,7 @@ allowBuilds:
   '@nestjs/core': false
   '@parcel/watcher': true
   esbuild: true
+  msgpackr-extract: false
   sharp: true
   unrs-resolver: true
 overrides:

@@ -31,6 +31,10 @@ apps/api/src/
     exceptions/            # shared exception filters, if/when needed
     kernel/                # generic base types used across slices (e.g. a Result<T> type)
 
+  db/                      # Drizzle/Postgres connection module (DrizzleModule) — lands M2
+  queue/                   # BullMQ/Redis connection module (QueueModule) — lands M9,
+                            # connection-level setup only, doesn't register any queue itself
+
   entities/
     project/
       domain/              # Project type/interface, no framework imports
@@ -53,6 +57,9 @@ apps/api/src/
       ...
     track-conversion/       # lands M5
       ...
+    process-events/         # lands M9 — the BullMQ worker/consumer, drains the
+      ...                   #   `events` queue producers (assign-variant, log-conversion)
+                             #   push onto via `registerQueue({ name: 'events' })`
 ```
 
 Rule of thumb for "is this an entity or a feature": if it's a noun with a table behind it,

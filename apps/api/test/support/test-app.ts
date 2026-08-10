@@ -1,5 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication, ValidationPipe } from '@nestjs/common';
+import { getQueueToken } from '@nestjs/bullmq';
+import { Queue } from 'bullmq';
 import { sql } from 'drizzle-orm';
 import { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import request from 'supertest';
@@ -32,6 +34,29 @@ export async function cleanDatabase(app: INestApplication<App>) {
   await db.execute(
     sql`TRUNCATE TABLE events, variants, experiments, feature_flags, projects RESTART IDENTITY CASCADE`,
   );
+}
+
+// Exposure/conversion writes now go through a BullMQ queue (M9) instead of
+// happening inline in the request — a test that asserts on /results (which
+// reads straight from Postgres) needs to wait for the worker to actually
+// drain the queue first, or it races the write. Poll job counts instead of a
+// fixed sleep so this stays fast in the common case and still has a ceiling.
+export async function waitForQueueDrain(
+  app: INestApplication<App>,
+  timeoutMs = 5000,
+) {
+  const queue = app.get<Queue>(getQueueToken('events'));
+  const start = Date.now();
+
+  while (Date.now() - start < timeoutMs) {
+    const counts = await queue.getJobCounts('waiting', 'active', 'delayed');
+    if (counts.waiting === 0 && counts.active === 0 && counts.delayed === 0) {
+      return;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+
+  throw new Error(`events queue did not drain within ${timeoutMs}ms`);
 }
 
 export interface TestProject {

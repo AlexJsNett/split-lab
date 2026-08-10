@@ -2,6 +2,7 @@ import { Test } from '@nestjs/testing';
 import { BadRequestException } from '@nestjs/common';
 import { DRIZZLE } from '@/db/drizzle.module';
 import { ManageExperimentsService } from '@/features/manage-experiments/manage-experiments.service';
+import { getQueueToken } from '@nestjs/bullmq';
 import { AssignVariantService } from './assign-variant.service';
 
 type MockDb = {
@@ -28,20 +29,16 @@ function mockSelectWhere(db: MockDb, resolvedRows: unknown[]) {
   });
 }
 
-function mockInsert(db: MockDb) {
-  const valuesFn = jest.fn().mockResolvedValue(undefined);
-  db.insert.mockReturnValueOnce({ values: valuesFn });
-  return valuesFn;
-}
-
 describe('AssignVariantService', () => {
   let service: AssignVariantService;
   let db: MockDb;
   let manageExperimentsService: { findOne: jest.Mock };
+  let eventsQueue: { add: jest.Mock };
 
   beforeEach(async () => {
     db = createMockDb();
     manageExperimentsService = { findOne: jest.fn() };
+    eventsQueue = { add: jest.fn().mockResolvedValue(undefined) };
 
     const module = await Test.createTestingModule({
       providers: [
@@ -51,6 +48,7 @@ describe('AssignVariantService', () => {
           provide: ManageExperimentsService,
           useValue: manageExperimentsService,
         },
+        { provide: getQueueToken('events'), useValue: eventsQueue },
       ],
     }).compile();
 
@@ -70,7 +68,7 @@ describe('AssignVariantService', () => {
       service.assign('project-1', 'experiment-1', 'user-42'),
     ).rejects.toThrow(BadRequestException);
     expect(db.select).not.toHaveBeenCalled();
-    expect(db.insert).not.toHaveBeenCalled();
+    expect(eventsQueue.add).not.toHaveBeenCalled();
   });
 
   it('propagates NotFoundException when the experiment does not exist', async () => {
@@ -84,7 +82,7 @@ describe('AssignVariantService', () => {
     expect(db.select).not.toHaveBeenCalled();
   });
 
-  it('assigns a variant and logs an exposure event when the experiment is running', async () => {
+  it('assigns a variant and queues an exposure event when the experiment is running', async () => {
     manageExperimentsService.findOne.mockResolvedValue({
       id: 'experiment-1',
       projectId: 'project-1',
@@ -100,7 +98,6 @@ describe('AssignVariantService', () => {
         weight: 100,
       },
     ]);
-    const valuesFn = mockInsert(db);
 
     const result = await service.assign('project-1', 'experiment-1', 'user-42');
 
@@ -110,7 +107,7 @@ describe('AssignVariantService', () => {
       key: 'control',
       weight: 100,
     });
-    expect(valuesFn).toHaveBeenCalledWith({
+    expect(eventsQueue.add).toHaveBeenCalledWith('exposure', {
       experimentId: 'experiment-1',
       variantId: 'variant-1',
       userId: 'user-42',
@@ -131,11 +128,9 @@ describe('AssignVariantService', () => {
       { id: 'variant-b', experimentId: 'experiment-1', key: 'b', weight: 50 },
     ];
     mockSelectWhere(db, rows);
-    mockInsert(db);
     const first = await service.assign('project-1', 'experiment-1', 'user-42');
 
     mockSelectWhere(db, rows);
-    mockInsert(db);
     const second = await service.assign('project-1', 'experiment-1', 'user-42');
 
     expect(second.id).toEqual(first.id);

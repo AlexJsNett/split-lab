@@ -64,9 +64,27 @@ planning the next one or checking what's still ahead.
       `--runInBand`, since all 4 files share one real database and Jest's default parallel
       workers raced each other's `TRUNCATE`s otherwise. 13/13 e2e passing, 75 tests total
       across the API.
-- [ ] **M9 — Redis + async events**: move event ingestion off the request/response path —
+- [x] **M9 — Redis + async events**: move event ingestion off the request/response path —
       publish exposure/conversion events to a Redis-backed BullMQ queue, process them in a
       worker. This is the "asynchronous processing" line from the target list.
+      Done: `src/queue/queue.module.ts` (`@Global()`, `BullModule.forRootAsync`, mirrors
+      `DrizzleModule`'s connection-config shape) plus `features/process-events/` (the
+      `@Processor('events')`/`WorkerHost` worker that does the actual `db.insert(events)` —
+      now the only file in `src` that does). `assign-variant` and `log-conversion` each
+      `registerQueue({ name: 'events' })` and push `'exposure'`/`'conversion'` jobs instead of
+      inserting inline. Redis added to `docker-compose.yml` (no persistence volume — an
+      ephemeral event queue doesn't need durability, Postgres is the durable store once the
+      worker writes). Real gotcha: `bullmq`'s `ioredis` dependency is declared as a
+      `peerDependency`, not auto-installed — had to `pnpm add ioredis` explicitly or
+      `@nestjs/bullmq` fails to resolve at require time. Also had to resolve
+      `pnpm-workspace.yaml`'s `allowBuilds` gate for `msgpackr-extract` (bullmq's optional
+      native msgpack accelerator, has a pure-JS fallback) — set `false`, same call as
+      `@nestjs/core`. The known trade-off: `logConversion`'s exposure lookup can no longer
+      assume read-your-own-writes (the exposure may still be queued, not yet in Postgres) —
+      solved with a bounded retry (25ms/50ms/100ms, 4 attempts) rather than making exposure
+      synchronous again. e2e: `test/support/test-app.ts` gained `waitForQueueDrain()`, polling
+      `Queue.getJobCounts()` before any assertion that reads `/results` straight from Postgres.
+      66/66 unit tests, 13/13 e2e passing. Full writeup: `.agents/guides/backend/messaging.md`.
 - [ ] **M10 — RabbitMQ + a second service**: split event processing into its own NestJS
       microservice, communicating with the main API over RabbitMQ instead of BullMQ. This is
       the SOA/microservices + message-broker line — inter-service comms, not just a queue.
