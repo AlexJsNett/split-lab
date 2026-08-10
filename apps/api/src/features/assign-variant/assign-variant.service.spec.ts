@@ -3,6 +3,7 @@ import { BadRequestException } from '@nestjs/common';
 import { DRIZZLE } from '@/db/drizzle.module';
 import { ManageExperimentsService } from '@/features/manage-experiments/manage-experiments.service';
 import { getQueueToken } from '@nestjs/bullmq';
+import { EVENT_JOB_OPTIONS } from '@/features/process-events/process-events.processor';
 import { AssignVariantService } from './assign-variant.service';
 
 type MockDb = {
@@ -107,12 +108,16 @@ describe('AssignVariantService', () => {
       key: 'control',
       weight: 100,
     });
-    expect(eventsQueue.add).toHaveBeenCalledWith('exposure', {
-      experimentId: 'experiment-1',
-      variantId: 'variant-1',
-      userId: 'user-42',
-      type: 'exposure',
-    });
+    expect(eventsQueue.add).toHaveBeenCalledWith(
+      'exposure',
+      {
+        experimentId: 'experiment-1',
+        variantId: 'variant-1',
+        userId: 'user-42',
+        type: 'exposure',
+      },
+      EVENT_JOB_OPTIONS,
+    );
   });
 
   it('is deterministic — same experiment and userId always resolve to the same variant', async () => {

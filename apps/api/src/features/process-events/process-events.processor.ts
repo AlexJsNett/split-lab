@@ -3,7 +3,7 @@ import * as schema from '@/db/schema';
 import { events } from '@/entities/event/infrastructure/event.schema';
 import { Processor, WorkerHost } from '@nestjs/bullmq';
 import { Inject } from '@nestjs/common';
-import { Job } from 'bullmq';
+import { Job, JobsOptions } from 'bullmq';
 import { NodePgDatabase } from 'drizzle-orm/node-postgres';
 
 export interface EventJobData {
@@ -12,6 +12,16 @@ export interface EventJobData {
   userId: string;
   type: 'exposure' | 'conversion';
 }
+
+// Shared by both producers (assign-variant, log-conversion) so a transient
+// Postgres blip during processing doesn't silently drop the event — 3 attempts
+// total, exponential backoff starting at 1s (~1s, ~2s, ~4s after the first try).
+// Jobs that still fail after all 3 attempts stay in Redis's failed set (no
+// removeOnFail) for ReconcileFailedEventsService to pick back up later.
+export const EVENT_JOB_OPTIONS: JobsOptions = {
+  attempts: 3,
+  backoff: { type: 'exponential', delay: 1000 },
+};
 
 // The actual durable write that assign-variant/log-conversion used to do
 // synchronously in the request handler. Running here, off the request path,

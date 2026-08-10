@@ -3,7 +3,10 @@ import * as schema from '@/db/schema';
 import { assignVariant } from '@/entities/experiment/domain/assign-variant';
 import { variants } from '@/entities/variant/infrastructure/variant.schema';
 import { ManageExperimentsService } from '@/features/manage-experiments/manage-experiments.service';
-import { EventJobData } from '@/features/process-events/process-events.processor';
+import {
+  EVENT_JOB_OPTIONS,
+  EventJobData,
+} from '@/features/process-events/process-events.processor';
 import { InjectQueue } from '@nestjs/bullmq';
 import { BadRequestException, Inject, Injectable } from '@nestjs/common';
 import { Queue } from 'bullmq';
@@ -39,12 +42,16 @@ export class AssignVariantService {
     // Durable write moves off the request path — assign() is the hot path,
     // called on every flag/experiment check, so it can't wait on Postgres.
     // A worker (ProcessEventsProcessor) drains this queue and does the actual insert.
-    await this.eventsQueue.add('exposure', {
-      experimentId,
-      variantId: variant.id,
-      userId,
-      type: 'exposure',
-    });
+    await this.eventsQueue.add(
+      'exposure',
+      {
+        experimentId,
+        variantId: variant.id,
+        userId,
+        type: 'exposure',
+      },
+      EVENT_JOB_OPTIONS,
+    );
 
     return variant;
   }

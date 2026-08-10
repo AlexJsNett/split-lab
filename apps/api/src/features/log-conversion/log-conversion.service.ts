@@ -2,7 +2,10 @@ import { DRIZZLE } from '@/db/drizzle.module';
 import * as schema from '@/db/schema';
 import { events } from '@/entities/event/infrastructure/event.schema';
 import { ManageExperimentsService } from '@/features/manage-experiments/manage-experiments.service';
-import { EventJobData } from '@/features/process-events/process-events.processor';
+import {
+  EVENT_JOB_OPTIONS,
+  EventJobData,
+} from '@/features/process-events/process-events.processor';
 import { InjectQueue } from '@nestjs/bullmq';
 import { BadRequestException, Inject, Injectable } from '@nestjs/common';
 import { Queue } from 'bullmq';
@@ -44,12 +47,16 @@ export class LogConversionService {
       );
     }
 
-    await this.eventsQueue.add('conversion', {
-      experimentId,
-      variantId: exposure.variantId,
-      userId,
-      type: 'conversion',
-    });
+    await this.eventsQueue.add(
+      'conversion',
+      {
+        experimentId,
+        variantId: exposure.variantId,
+        userId,
+        type: 'conversion',
+      },
+      EVENT_JOB_OPTIONS,
+    );
 
     return {
       experimentId,

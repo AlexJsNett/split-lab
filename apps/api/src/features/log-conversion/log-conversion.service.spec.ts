@@ -3,6 +3,7 @@ import { BadRequestException } from '@nestjs/common';
 import { DRIZZLE } from '@/db/drizzle.module';
 import { ManageExperimentsService } from '@/features/manage-experiments/manage-experiments.service';
 import { getQueueToken } from '@nestjs/bullmq';
+import { EVENT_JOB_OPTIONS } from '@/features/process-events/process-events.processor';
 import { LogConversionService } from './log-conversion.service';
 
 type MockDb = {
@@ -92,12 +93,16 @@ describe('LogConversionService', () => {
       'user-42',
     );
 
-    expect(eventsQueue.add).toHaveBeenCalledWith('conversion', {
-      experimentId: 'experiment-1',
-      variantId: 'variant-1',
-      userId: 'user-42',
-      type: 'conversion',
-    });
+    expect(eventsQueue.add).toHaveBeenCalledWith(
+      'conversion',
+      {
+        experimentId: 'experiment-1',
+        variantId: 'variant-1',
+        userId: 'user-42',
+        type: 'conversion',
+      },
+      EVENT_JOB_OPTIONS,
+    );
     expect(result.type).toEqual('conversion');
     expect(result.variantId).toEqual('variant-1');
     expect(db.select).toHaveBeenCalledTimes(1);
@@ -170,12 +175,16 @@ describe('LogConversionService', () => {
       const result = await resultPromise;
 
       expect(db.select).toHaveBeenCalledTimes(2);
-      expect(eventsQueue.add).toHaveBeenCalledWith('conversion', {
-        experimentId: 'experiment-1',
-        variantId: 'variant-1',
-        userId: 'user-42',
-        type: 'conversion',
-      });
+      expect(eventsQueue.add).toHaveBeenCalledWith(
+        'conversion',
+        {
+          experimentId: 'experiment-1',
+          variantId: 'variant-1',
+          userId: 'user-42',
+          type: 'conversion',
+        },
+        EVENT_JOB_OPTIONS,
+      );
       expect(result.variantId).toEqual('variant-1');
     });
 

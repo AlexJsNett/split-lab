@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { APP_GUARD } from '@nestjs/core';
 import { ConfigModule } from '@nestjs/config';
+import { ScheduleModule } from '@nestjs/schedule';
 import { ApiKeyGuard } from '@/shared/guards/api-key.guard';
 import { ProjectOwnershipGuard } from '@/shared/guards/project-ownership.guard';
 import { DrizzleModule } from '@/db/drizzle.module';
@@ -20,6 +21,7 @@ import { ProcessEventsModule } from '@/features/process-events/process-events.mo
       isGlobal: true,
       envFilePath: process.env.NODE_ENV === 'test' ? '.env.test' : '.env',
     }),
+    ScheduleModule.forRoot(),
     DrizzleModule,
     QueueModule,
     ManageProjectsModule,

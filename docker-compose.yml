@@ -15,8 +15,15 @@ services:
   redis:
     image: redis:7-alpine
     restart: unless-stopped
+    # AOF persistence: queued-but-unprocessed BullMQ jobs survive a Redis restart,
+    # not just a worker crash. everysec (Redis's default) fsync policy — ~1s
+    # worst-case loss window on a true crash, same trade-off Postgres makes by default.
+    command: redis-server --appendonly yes
     ports:
       - "6379:6379"
+    volumes:
+      - redis-data:/data
 
 volumes:
   postgres-data:
+  redis-data:

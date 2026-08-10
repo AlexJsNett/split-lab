@@ -85,6 +85,25 @@ planning the next one or checking what's still ahead.
       synchronous again. e2e: `test/support/test-app.ts` gained `waitForQueueDrain()`, polling
       `Queue.getJobCounts()` before any assertion that reads `/results` straight from Postgres.
       66/66 unit tests, 13/13 e2e passing. Full writeup: `.agents/guides/backend/messaging.md`.
+      Follow-up hardening (same milestone, separate pass): the "ephemeral queue, Postgres is
+      the durable store" call above didn't account for two independent loss windows — a
+      transient Postgres blip during `process(job)` with `attempts: 1` (no retry) just drops
+      the job, and Redis itself restarting with no persistence loses every queued job, not
+      just ones mid-flight. Closed with three independent layers: (1) `EVENT_JOB_OPTIONS`
+      (`{ attempts: 3, backoff: { type: 'exponential', delay: 1000 } }`, one shared constant
+      in `process-events.processor.ts`, imported by both producers) so a short Postgres blip
+      self-heals via BullMQ's own retry loop; (2) `docker-compose.yml`'s `redis` service gained
+      `command: redis-server --appendonly yes` + a `redis-data` volume (same shape as
+      `postgres-data`) so a Redis container restart replays from disk instead of losing
+      in-flight jobs; (3) `ReconcileFailedEventsService` (new `@nestjs/schedule` dependency,
+      `ScheduleModule.forRoot()` in `AppModule`), a `@Cron(CronExpression.EVERY_5_MINUTES)` job that calls
+      `eventsQueue.getFailed()` and `job.retry()` on each one — for a Postgres outage long
+      enough to exhaust Layer 1's 3 attempts. Real gotcha: `job.retry()`'s default `state`
+      argument is already `'failed'`, matching `getFailed()`'s output, and a manual `.retry()`
+      isn't blocked by the job already being at its `attempts` ceiling (that ceiling only gates
+      BullMQ's *automatic* retries) — so no extra options were needed to make Layer 3 actually
+      retry an exhausted job. 68/68 unit tests, 13/13 e2e passing. Full writeup:
+      `.agents/guides/backend/messaging.md`.
 - [ ] **M10 — RabbitMQ + a second service**: split event processing into its own NestJS
       microservice, communicating with the main API over RabbitMQ instead of BullMQ. This is
       the SOA/microservices + message-broker line — inter-service comms, not just a queue.
