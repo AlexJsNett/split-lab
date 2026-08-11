@@ -32,8 +32,11 @@ apps/api/src/
     kernel/                # generic base types used across slices (e.g. a Result<T> type)
 
   db/                      # Drizzle/Postgres connection module (DrizzleModule) — lands M2
-  queue/                   # BullMQ/Redis connection module (QueueModule) — lands M9,
-                            # connection-level setup only, doesn't register any queue itself
+  messaging/               # (apps/event-processor only, from M10) — RabbitMQ topology
+                            # (queue/exchange names + arguments) and the raw amqplib
+                            # assertion that declares it. Connection-level sibling of db/,
+                            # the same role src/queue/ (BullMQ/Redis, M9) had before M10
+                            # replaced it — see messaging.md.
 
   entities/
     project/
@@ -57,9 +60,11 @@ apps/api/src/
       ...
     track-conversion/       # lands M5
       ...
-    process-events/         # lands M9 — the BullMQ worker/consumer, drains the
-      ...                   #   `events` queue producers (assign-variant, log-conversion)
-                             #   push onto via `registerQueue({ name: 'events' })`
+    process-events/         # apps/event-processor only, from M10 — the RabbitMQ
+      ...                   #   consumer (@EventPattern handlers) + the reconciliation
+                             #   cron. apps/api's producers (assign-variant,
+                             #   log-conversion) publish to it over the network now,
+                             #   not an in-process queue — see messaging.md.
 ```
 
 Rule of thumb for "is this an entity or a feature": if it's a noun with a table behind it,
@@ -78,3 +83,23 @@ needs them lands.
 Once M3 lands (first real feature: evaluate-flag), update this doc with a concrete example of
 the domain/infrastructure split for one real slice, DTO validation pattern, and how errors
 surface to the client. Once M7 lands, add the auth guard pattern here too.
+
+## Two services, one convention (from M10)
+
+This convention now spans two separate NestJS processes, not just `apps/api`:
+`apps/event-processor` (`@split-lab/event-processor`) follows the identical
+`entities/`+`features/` FSD layout, the same `@/*` path alias, and the same eslint/prettier/
+Jest configuration — it's a second application of the same rules above, not a different set of
+rules for "the worker." Two differences worth naming explicitly:
+
+- **Entry point.** `apps/api/src/app/main.ts` calls `NestFactory.create(AppModule)` (an HTTP
+  app). `apps/event-processor/src/app/main.ts` calls `NestFactory.createMicroservice(AppModule,
+  options)` instead — there's no HTTP server in that process at all, just a RabbitMQ consumer.
+- **A consumer controller sits in a feature folder exactly like an HTTP controller does.**
+  `apps/event-processor/src/features/process-events/process-events.controller.ts` is a real
+  `@Controller()` with `@EventPattern(...)` handlers instead of `@Get()`/`@Post()` ones — same
+  "controller lives next to its service, in the feature's folder" rule, just a different
+  transport.
+
+Full messaging architecture (topology, retry/parking-lot design, the message contract): see
+`messaging.md`.

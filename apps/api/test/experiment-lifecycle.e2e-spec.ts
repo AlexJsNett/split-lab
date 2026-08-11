@@ -5,8 +5,9 @@ import {
   cleanDatabase,
   createTestApp,
   createTestProject,
+  readPublishedEvents,
+  seedEvents,
   TestProject,
-  waitForQueueDrain,
 } from './support/test-app';
 
 interface VariantResult {
@@ -17,6 +18,14 @@ interface VariantResult {
   conversionRate: number;
 }
 
+// D8 (M10 plan): this suite tests the API's half of the contract — "the API
+// publishes a correct message" — against a real broker, with no worker
+// process running. seedEvents() stands in for what apps/event-processor
+// would otherwise have written; the worker's own half of the contract
+// ("the worker persists one correctly") is covered by
+// apps/event-processor/test/*.e2e-spec.ts instead. The one thing this split
+// deliberately does not cover — the live cross-service golden path with both
+// processes running — is deferred to M13 (see messaging.md).
 describe('Experiment lifecycle: variants -> assign -> conversion -> results (e2e)', () => {
   let app: INestApplication<App>;
   let project: TestProject;
@@ -56,6 +65,14 @@ describe('Experiment lifecycle: variants -> assign -> conversion -> results (e2e
     return response.body as { id: string; key: string };
   }
 
+  async function startExperiment(experimentId: string) {
+    await request(app.getHttpServer())
+      .patch(`/projects/${project.id}/experiments/${experimentId}`)
+      .set('x-api-key', project.apiKey)
+      .send({ status: 'running' })
+      .expect(200);
+  }
+
   it('assign rejects a non-running experiment', async () => {
     const experiment = await createExperiment();
 
@@ -77,16 +94,11 @@ describe('Experiment lifecycle: variants -> assign -> conversion -> results (e2e
       .expect(400);
   });
 
-  it('full golden path: assign is deterministic, feeds conversion, feeds results', async () => {
+  it('assign is deterministic and publishes a well-formed exposure event per call', async () => {
     const experiment = await createExperiment();
-    const control = await createVariant(experiment.id, 'control', 50);
+    await createVariant(experiment.id, 'control', 50);
     await createVariant(experiment.id, 'treatment', 50);
-
-    await request(app.getHttpServer())
-      .patch(`/projects/${project.id}/experiments/${experiment.id}`)
-      .set('x-api-key', project.apiKey)
-      .send({ status: 'running' })
-      .expect(200);
+    await startExperiment(experiment.id);
 
     const firstAssignResponse = await request(app.getHttpServer())
       .get(`/projects/${project.id}/experiments/${experiment.id}/assign`)
@@ -104,14 +116,40 @@ describe('Experiment lifecycle: variants -> assign -> conversion -> results (e2e
 
     // deterministic bucketing: same userId + same experiment -> same variant
     expect(secondAssign.id).toBe(firstAssign.id);
-    const assignedVariantId = firstAssign.id;
 
-    // a second, distinct user, exposed but never converting
-    await request(app.getHttpServer())
-      .get(`/projects/${project.id}/experiments/${experiment.id}/assign`)
-      .set('x-api-key', project.apiKey)
-      .query({ userId: 'user-2' })
-      .expect(200);
+    // assign() publishes a fresh exposure on every call (no dedup) — two
+    // calls above, two messages expected on the queue.
+    const [firstMessage, secondMessage] = await readPublishedEvents(app, 2);
+    expect(firstMessage).toEqual({
+      experimentId: experiment.id,
+      variantId: firstAssign.id,
+      userId: 'user-1',
+      type: 'exposure',
+    });
+    expect(secondMessage).toEqual({
+      experimentId: experiment.id,
+      variantId: secondAssign.id,
+      userId: 'user-1',
+      type: 'exposure',
+    });
+  });
+
+  it("conversions publishes a conversion event carrying the seeded exposure's variantId", async () => {
+    const experiment = await createExperiment();
+    const control = await createVariant(experiment.id, 'control', 100);
+    await startExperiment(experiment.id);
+
+    // No worker runs in this suite (D8) — seed the exposure row
+    // findExposureWithRetry needs directly, the same row apps/event-processor
+    // would otherwise have written.
+    await seedEvents(app, [
+      {
+        experimentId: experiment.id,
+        variantId: control.id,
+        userId: 'user-1',
+        type: 'exposure',
+      },
+    ]);
 
     await request(app.getHttpServer())
       .post(`/projects/${project.id}/experiments/${experiment.id}/conversions`)
@@ -120,9 +158,23 @@ describe('Experiment lifecycle: variants -> assign -> conversion -> results (e2e
       .expect(201)
       .expect((res) => {
         const body = res.body as { variantId: string; type: string };
-        expect(body.variantId).toBe(assignedVariantId);
+        expect(body.variantId).toBe(control.id);
         expect(body.type).toBe('conversion');
       });
+
+    const [message] = await readPublishedEvents(app, 1);
+    expect(message).toEqual({
+      experimentId: experiment.id,
+      variantId: control.id,
+      userId: 'user-1',
+      type: 'conversion',
+    });
+  });
+
+  it('conversions rejects a user with no recorded exposure', async () => {
+    const experiment = await createExperiment();
+    await createVariant(experiment.id, 'control', 100);
+    await startExperiment(experiment.id);
 
     // never exposed -> no variant to attribute the conversion to
     await request(app.getHttpServer())
@@ -130,10 +182,36 @@ describe('Experiment lifecycle: variants -> assign -> conversion -> results (e2e
       .set('x-api-key', project.apiKey)
       .send({ userId: 'never-exposed' })
       .expect(400);
+  });
 
-    // /results reads straight from Postgres — wait for the worker to drain
-    // the exposure/conversion jobs queued above before asserting on it.
-    await waitForQueueDrain(app);
+  it('results aggregates seeded events per variant, zero-filling variants with no events', async () => {
+    const experiment = await createExperiment();
+    const control = await createVariant(experiment.id, 'control', 50);
+    const treatment = await createVariant(experiment.id, 'treatment', 50);
+    await startExperiment(experiment.id);
+
+    // /results is a pure read endpoint straight off Postgres — seeding rows
+    // directly (no worker in this suite) is a faithful test of it (D8).
+    await seedEvents(app, [
+      {
+        experimentId: experiment.id,
+        variantId: control.id,
+        userId: 'user-1',
+        type: 'exposure',
+      },
+      {
+        experimentId: experiment.id,
+        variantId: control.id,
+        userId: 'user-1',
+        type: 'conversion',
+      },
+      {
+        experimentId: experiment.id,
+        variantId: control.id,
+        userId: 'user-2',
+        type: 'exposure',
+      },
+    ]);
 
     const resultsResponse = await request(app.getHttpServer())
       .get(`/projects/${project.id}/experiments/${experiment.id}/results`)
@@ -142,29 +220,25 @@ describe('Experiment lifecycle: variants -> assign -> conversion -> results (e2e
     const results = resultsResponse.body as VariantResult[];
 
     expect(results).toHaveLength(2);
-    const totalExposures = results.reduce(
-      (sum, variant) => sum + variant.exposures,
-      0,
-    );
-    const totalConversions = results.reduce(
-      (sum, variant) => sum + variant.conversions,
-      0,
-    );
-    // assign() logs a fresh exposure on every call, even for a repeat userId
-    // (no dedup) — user-1 was assigned twice above (first + second), user-2 once.
-    expect(totalExposures).toBe(3);
-    expect(totalConversions).toBe(1); // only user-1 converted
 
-    const assignedVariantResult = results.find(
-      (variant) => variant.variantId === assignedVariantId,
+    const controlResult = results.find(
+      (variant) => variant.variantId === control.id,
     );
-    expect(assignedVariantResult?.conversions).toBe(1);
-    expect(assignedVariantResult?.conversionRate).toBeGreaterThan(0);
+    expect(controlResult?.exposures).toBe(2);
+    expect(controlResult?.conversions).toBe(1);
+    expect(controlResult?.conversionRate).toBeGreaterThan(0);
 
-    // both variants appear even if one of them got zero events —
+    // both variants appear even though treatment has zero events —
     // get-results zero-fills, it doesn't silently drop unused variants.
-    expect(results.map((variant) => variant.variantId)).toEqual(
-      expect.arrayContaining([control.id]),
+    const treatmentResult = results.find(
+      (variant) => variant.variantId === treatment.id,
     );
+    expect(treatmentResult).toEqual({
+      variantId: treatment.id,
+      key: 'treatment',
+      exposures: 0,
+      conversions: 0,
+      conversionRate: 0,
+    });
   });
 });

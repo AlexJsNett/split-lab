@@ -2,22 +2,23 @@ import { DRIZZLE } from '@/db/drizzle.module';
 import * as schema from '@/db/schema';
 import { events } from '@/entities/event/infrastructure/event.schema';
 import { ManageExperimentsService } from '@/features/manage-experiments/manage-experiments.service';
-import {
-  EVENT_JOB_OPTIONS,
-  EventJobData,
-} from '@/features/process-events/process-events.processor';
-import { InjectQueue } from '@nestjs/bullmq';
 import { BadRequestException, Inject, Injectable } from '@nestjs/common';
-import { Queue } from 'bullmq';
+import { ClientProxy } from '@nestjs/microservices';
+import { EVENT_PATTERN } from '@split-lab/events-contract';
+import type { EventMessage } from '@split-lab/events-contract';
 import { and, eq } from 'drizzle-orm';
 import { NodePgDatabase } from 'drizzle-orm/node-postgres';
+import { firstValueFrom } from 'rxjs';
 
 // Exposure writes moved off the request path (M9) — the exposure a conversion
-// needs to attribute to may still be sitting in the queue, not yet in Postgres,
-// when the conversion request arrives right behind it. Same eventual-consistency
-// gap real event pipelines (Amplitude/Segment/PostHog) accept; solved with a
-// short bounded retry here rather than making exposure synchronous again.
-const EXPOSURE_RETRY_DELAYS_MS = [25, 50, 100];
+// needs to attribute to may still be in flight (RabbitMQ + apps/event-processor's
+// own insert, as of M10 — a process boundary and a broker hop, not just an
+// in-memory queue round-trip) when the conversion request arrives right
+// behind it. Same eventual-consistency gap real event pipelines (Amplitude/
+// Segment/PostHog) accept; solved with a short bounded retry here rather than
+// making exposure synchronous again. One rung wider than M9's own retry (D9,
+// M10 plan) for that same reason — the write now crosses more distance.
+const EXPOSURE_RETRY_DELAYS_MS = [25, 50, 100, 200];
 
 function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -28,7 +29,7 @@ export class LogConversionService {
   constructor(
     @Inject(DRIZZLE) private readonly db: NodePgDatabase<typeof schema>,
     private readonly manageExperimentsService: ManageExperimentsService,
-    @InjectQueue('events') private readonly eventsQueue: Queue<EventJobData>,
+    @Inject('EVENTS_CLIENT') private readonly client: ClientProxy,
   ) {}
 
   async logConversion(projectId: string, experimentId: string, userId: string) {
@@ -47,16 +48,13 @@ export class LogConversionService {
       );
     }
 
-    await this.eventsQueue.add(
-      'conversion',
-      {
-        experimentId,
-        variantId: exposure.variantId,
-        userId,
-        type: 'conversion',
-      },
-      EVENT_JOB_OPTIONS,
-    );
+    const message: EventMessage = {
+      experimentId,
+      variantId: exposure.variantId,
+      userId,
+      type: 'conversion',
+    };
+    await firstValueFrom(this.client.emit(EVENT_PATTERN.CONVERSION, message));
 
     return {
       experimentId,

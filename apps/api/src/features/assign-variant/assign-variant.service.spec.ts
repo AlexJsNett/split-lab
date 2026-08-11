@@ -1,9 +1,8 @@
 import { Test } from '@nestjs/testing';
 import { BadRequestException } from '@nestjs/common';
+import { of } from 'rxjs';
 import { DRIZZLE } from '@/db/drizzle.module';
 import { ManageExperimentsService } from '@/features/manage-experiments/manage-experiments.service';
-import { getQueueToken } from '@nestjs/bullmq';
-import { EVENT_JOB_OPTIONS } from '@/features/process-events/process-events.processor';
 import { AssignVariantService } from './assign-variant.service';
 
 type MockDb = {
@@ -34,12 +33,15 @@ describe('AssignVariantService', () => {
   let service: AssignVariantService;
   let db: MockDb;
   let manageExperimentsService: { findOne: jest.Mock };
-  let eventsQueue: { add: jest.Mock };
+  let client: { emit: jest.Mock };
 
   beforeEach(async () => {
     db = createMockDb();
     manageExperimentsService = { findOne: jest.fn() };
-    eventsQueue = { add: jest.fn().mockResolvedValue(undefined) };
+    // ClientProxy.emit() returns an Observable, not a Promise — of(undefined)
+    // mirrors firstValueFrom() resolving once the broker confirms the
+    // publish (V10), the real-world equivalent of the old Queue.add() mock.
+    client = { emit: jest.fn().mockReturnValue(of(undefined)) };
 
     const module = await Test.createTestingModule({
       providers: [
@@ -49,7 +51,7 @@ describe('AssignVariantService', () => {
           provide: ManageExperimentsService,
           useValue: manageExperimentsService,
         },
-        { provide: getQueueToken('events'), useValue: eventsQueue },
+        { provide: 'EVENTS_CLIENT', useValue: client },
       ],
     }).compile();
 
@@ -69,7 +71,7 @@ describe('AssignVariantService', () => {
       service.assign('project-1', 'experiment-1', 'user-42'),
     ).rejects.toThrow(BadRequestException);
     expect(db.select).not.toHaveBeenCalled();
-    expect(eventsQueue.add).not.toHaveBeenCalled();
+    expect(client.emit).not.toHaveBeenCalled();
   });
 
   it('propagates NotFoundException when the experiment does not exist', async () => {
@@ -83,7 +85,7 @@ describe('AssignVariantService', () => {
     expect(db.select).not.toHaveBeenCalled();
   });
 
-  it('assigns a variant and queues an exposure event when the experiment is running', async () => {
+  it('assigns a variant and publishes an exposure event when the experiment is running', async () => {
     manageExperimentsService.findOne.mockResolvedValue({
       id: 'experiment-1',
       projectId: 'project-1',
@@ -108,16 +110,12 @@ describe('AssignVariantService', () => {
       key: 'control',
       weight: 100,
     });
-    expect(eventsQueue.add).toHaveBeenCalledWith(
-      'exposure',
-      {
-        experimentId: 'experiment-1',
-        variantId: 'variant-1',
-        userId: 'user-42',
-        type: 'exposure',
-      },
-      EVENT_JOB_OPTIONS,
-    );
+    expect(client.emit).toHaveBeenCalledWith('exposure', {
+      experimentId: 'experiment-1',
+      variantId: 'variant-1',
+      userId: 'user-42',
+      type: 'exposure',
+    });
   });
 
   it('is deterministic — same experiment and userId always resolve to the same variant', async () => {

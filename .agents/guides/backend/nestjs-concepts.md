@@ -160,3 +160,67 @@ exist).
 
 - Pipes / Interceptors — same decorator+metadata mechanism, different hook points in the
   request lifecycle. Still unfilled — land here whenever the project actually uses one.
+
+## Microservices: a Nest app with no HTTP in it (M10)
+
+Every app so far has been built with `NestFactory.create(AppModule)` — an *HTTP* application:
+Nest wires up an Express/Fastify server underneath, `@Controller()` classes map to routes, and
+`app.listen(port)` starts that HTTP server. `apps/event-processor/src/app/main.ts` does
+something different: `NestFactory.createMicroservice(AppModule, options)`. Same `AppModule`,
+same DI container, same `@Controller()`/`@Injectable()` mechanics — but there's no HTTP server
+at all. `options.transport` picks what *is* listening instead (`Transport.RMQ` here, for
+RabbitMQ); `app.listen()` starts consuming from the broker rather than binding a port. This is
+why `apps/event-processor` needs no `@nestjs/platform-express` dependency — it never creates an
+HTTP layer to begin with.
+
+The controller shape barely changes either. `process-events.controller.ts` is a real
+`@Controller()`, exactly like `AssignVariantController` in `apps/api` — it just has
+`@EventPattern(...)` methods instead of `@Get()`/`@Post()` ones. Nest's routing concept (map an
+incoming thing to a handler method) is transport-agnostic; only what counts as "an incoming
+thing" changes (an HTTP request vs. a broker message).
+
+## `@EventPattern` vs `@MessagePattern` — fire-and-forget vs request/response
+
+Both decorators register a handler for an incoming message keyed by a "pattern" (here, the
+string `'exposure'`/`'conversion'` from `@split-lab/events-contract`'s `EVENT_PATTERN`
+constants) — the difference is what happens to the return value:
+
+- **`@MessagePattern`** is request/response: the client that sent the message is waiting for a
+  reply, and whatever the handler returns (or resolves to) gets sent back. This project doesn't
+  use it anywhere yet.
+- **`@EventPattern`** is fire-and-forget: nothing is waiting for a return value. The producer
+  (`assign-variant.service.ts`) publishes and moves on; the handler
+  (`process-events.controller.ts`'s `handleExposure`/`handleConversion`) does its work (insert
+  into Postgres, ack/nack the message) with nothing to send back. This is the right shape for
+  "record that this event happened" — the producer's job (`assign()` returning a variant to its
+  own caller) doesn't depend on the worker's insert succeeding synchronously; that's the whole
+  point of moving it off the request path back in M9.
+
+## `ClientProxy` and why `emit()` has to be subscribed to
+
+`ClientProxy` (injected via `@Inject('EVENTS_CLIENT')` in `assign-variant.service.ts` /
+`log-conversion.service.ts`) is Nest's client-side handle to a transport — the producer's
+equivalent of `DRIZZLE` for Postgres. `client.emit(pattern, data)` **does not publish
+anything by itself** — like all of RxJS, an `Observable` is lazy: nothing happens until
+something subscribes to it. `await firstValueFrom(client.emit(...))` both subscribes (which
+triggers the actual publish) and converts the single emitted value into a `Promise` so it can
+be `await`ed with ordinary `async`/`await` syntax instead of RxJS operators. Skipping the
+`firstValueFrom`/subscribe step is a real, easy-to-make mistake — the code *looks* like it
+published something, but the publish call was constructed and immediately discarded, and
+nothing ever went out. Bonus: because the underlying RMQ client publishes over a
+`ConfirmChannel`, the promise this resolves to doesn't just mean "the SDK call returned" — it
+means the broker has actually confirmed and durably stored the message (see V10 in
+`messaging.md`).
+
+## `ClientsModule.registerAsync` — the same factory pattern, a third time
+
+`assign-variant.module.ts`'s `ClientsModule.registerAsync([{ name: 'EVENTS_CLIENT', imports,
+inject, useFactory }])` is structurally identical to `DrizzleModule`'s `useFactory` provider and
+to M9's (now-removed) `QueueModule`'s `BullModule.forRootAsync` — the same "can't construct
+this until `ConfigService` is available, so hand Nest a factory function plus its own
+dependencies instead of a static value" pattern, applied a third time to a third kind of
+connection (Postgres, then Redis, now RabbitMQ). Recognizing the shape once means recognizing
+it everywhere: `useFactory` is called with whatever `inject` lists once those providers exist,
+and its return value becomes the actual provided value (here, the `ClientProxy` options object
+Nest uses to construct the RMQ client) — nothing new to learn each time this pattern shows up
+again.

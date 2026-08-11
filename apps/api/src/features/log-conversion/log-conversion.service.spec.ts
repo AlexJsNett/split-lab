@@ -1,9 +1,8 @@
 import { Test } from '@nestjs/testing';
 import { BadRequestException } from '@nestjs/common';
+import { of } from 'rxjs';
 import { DRIZZLE } from '@/db/drizzle.module';
 import { ManageExperimentsService } from '@/features/manage-experiments/manage-experiments.service';
-import { getQueueToken } from '@nestjs/bullmq';
-import { EVENT_JOB_OPTIONS } from '@/features/process-events/process-events.processor';
 import { LogConversionService } from './log-conversion.service';
 
 type MockDb = {
@@ -34,12 +33,12 @@ describe('LogConversionService', () => {
   let service: LogConversionService;
   let db: MockDb;
   let manageExperimentsService: { findOne: jest.Mock };
-  let eventsQueue: { add: jest.Mock };
+  let client: { emit: jest.Mock };
 
   beforeEach(async () => {
     db = createMockDb();
     manageExperimentsService = { findOne: jest.fn() };
-    eventsQueue = { add: jest.fn().mockResolvedValue(undefined) };
+    client = { emit: jest.fn().mockReturnValue(of(undefined)) };
 
     const module = await Test.createTestingModule({
       providers: [
@@ -49,7 +48,7 @@ describe('LogConversionService', () => {
           provide: ManageExperimentsService,
           useValue: manageExperimentsService,
         },
-        { provide: getQueueToken('events'), useValue: eventsQueue },
+        { provide: 'EVENTS_CLIENT', useValue: client },
       ],
     }).compile();
 
@@ -65,7 +64,7 @@ describe('LogConversionService', () => {
       service.logConversion('project-1', 'experiment-1', 'user-42'),
     ).rejects.toThrow('not found');
     expect(db.select).not.toHaveBeenCalled();
-    expect(eventsQueue.add).not.toHaveBeenCalled();
+    expect(client.emit).not.toHaveBeenCalled();
   });
 
   it('logs a conversion event reusing the variantId from the prior exposure', async () => {
@@ -93,16 +92,12 @@ describe('LogConversionService', () => {
       'user-42',
     );
 
-    expect(eventsQueue.add).toHaveBeenCalledWith(
-      'conversion',
-      {
-        experimentId: 'experiment-1',
-        variantId: 'variant-1',
-        userId: 'user-42',
-        type: 'conversion',
-      },
-      EVENT_JOB_OPTIONS,
-    );
+    expect(client.emit).toHaveBeenCalledWith('conversion', {
+      experimentId: 'experiment-1',
+      variantId: 'variant-1',
+      userId: 'user-42',
+      type: 'conversion',
+    });
     expect(result.type).toEqual('conversion');
     expect(result.variantId).toEqual('variant-1');
     expect(db.select).toHaveBeenCalledTimes(1);
@@ -175,20 +170,16 @@ describe('LogConversionService', () => {
       const result = await resultPromise;
 
       expect(db.select).toHaveBeenCalledTimes(2);
-      expect(eventsQueue.add).toHaveBeenCalledWith(
-        'conversion',
-        {
-          experimentId: 'experiment-1',
-          variantId: 'variant-1',
-          userId: 'user-42',
-          type: 'conversion',
-        },
-        EVENT_JOB_OPTIONS,
-      );
+      expect(client.emit).toHaveBeenCalledWith('conversion', {
+        experimentId: 'experiment-1',
+        variantId: 'variant-1',
+        userId: 'user-42',
+        type: 'conversion',
+      });
       expect(result.variantId).toEqual('variant-1');
     });
 
-    it('throws BadRequestException after exhausting all 4 attempts', async () => {
+    it('throws BadRequestException after exhausting all 5 attempts', async () => {
       manageExperimentsService.findOne.mockResolvedValue({
         id: 'experiment-1',
         projectId: 'project-1',
@@ -196,6 +187,7 @@ describe('LogConversionService', () => {
         name: 'X',
         status: 'running',
       });
+      mockSelectWhere(db, []);
       mockSelectWhere(db, []);
       mockSelectWhere(db, []);
       mockSelectWhere(db, []);
@@ -211,13 +203,17 @@ describe('LogConversionService', () => {
       const assertion =
         expect(resultPromise).rejects.toThrow(BadRequestException);
 
+      // D9 (M10 plan): EXPOSURE_RETRY_DELAYS_MS widened to [25, 50, 100, 200] —
+      // one rung wider than M9's [25, 50, 100], since the write now crosses a
+      // process boundary and a broker hop, not just an in-memory queue round-trip.
       await jest.advanceTimersByTimeAsync(25);
       await jest.advanceTimersByTimeAsync(50);
       await jest.advanceTimersByTimeAsync(100);
+      await jest.advanceTimersByTimeAsync(200);
 
       await assertion;
-      expect(db.select).toHaveBeenCalledTimes(4);
-      expect(eventsQueue.add).not.toHaveBeenCalled();
+      expect(db.select).toHaveBeenCalledTimes(5);
+      expect(client.emit).not.toHaveBeenCalled();
     });
   });
 });

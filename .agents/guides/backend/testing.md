@@ -58,6 +58,60 @@ Used sparingly (per `AGENTS.md`'s testing policy, these complement rather than r
 tests) — one happy-path e2e per resource is enough; edge cases and branching belong in the
 unit tests above. Landed in M8: `projects`, `flags`, `auth`, `experiment-lifecycle`.
 
+### Two services, two e2e suites (M10)
+
+Once event processing moved to a second process (`apps/event-processor`, M10), a single e2e
+suite could no longer exercise the whole assign -> conversion -> results path the way M9's
+could (that would need one Jest run booting both packages' sources — a cross-package dev
+dependency and `moduleNameMapper` reaching into a sibling app's `src/`, both fragile). The
+boundary is drawn explicitly instead: **`apps/api`'s e2e suite tests "does the API publish a
+correct message"; `apps/event-processor`'s own e2e suite (new, M10) tests "does the worker
+persist one correctly."** Each runs against a real broker; neither needs the other's process
+running. The live cross-service golden path (both processes actually running together) is
+deliberately deferred to M13 — see `messaging.md` and `milestones.md`.
+
+**`apps/api/test/support/test-app.ts`** — `waitForQueueDrain()` (M9, polled BullMQ's
+`Queue.getJobCounts()`) is gone; there's no `Queue` object anymore. Replaced by:
+- `readPublishedEvents(app, count)` — opens a raw `amqplib` channel against `events_test`,
+  drains up to `count` messages, decodes Nest's `{"pattern":...,"data":{...}}` envelope, and
+  returns the `data` payloads. Lets `assign`/`conversions` specs assert *"the right message
+  was published"* instead of *"a row eventually appeared."* Also asserts the `events_test`
+  queue into existence on `createTestApp()` (with the exact same arguments the worker would
+  use) — this suite never boots the worker, so without that assertion a producer's very first
+  publish would have nowhere to route to and would just vanish.
+- `seedEvents(app, rows)` — inserts event rows straight through the `DRIZZLE` client. Used
+  where a spec needs a row already durably in Postgres without a worker process to write it:
+  the prior exposure `POST /conversions`'s `findExposureWithRetry` needs, and the rows
+  `GET /results` aggregates (a pure read endpoint, so seeding is a faithful test of it).
+
+**`apps/event-processor/test/`** (new, M10) — boots the real worker microservice
+(`test/support/test-worker.ts`'s `startTestWorker()`, the same `assertTopology` ->
+`createMicroservice` sequence `main.ts` itself runs) against real RabbitMQ + real
+`splitlab_test`, and publishes with a real `ClientProxy` rather than a hand-built message —
+that exercises the actual Nest wire envelope, not an approximation of it. Covers: happy-path
+persist + ack; a forced-failure retry cycle that lands in `events.parked`; and
+`ReconcileParkedEventsService` draining the parking lot. Runs `--runInBand`, same
+shared-database reason M8 established for `apps/api`'s own suite.
+
+Two gotchas specific to this suite:
+- **The small-TTL trick.** The real retry queue's TTL is 5 seconds — fine in production, far
+  too slow for a test asserting a message actually completes 3 retry cycles. `buildTopology()`
+  takes an optional `retryTtlMs` override; `test/support/test-worker.ts` exports one shared
+  `TEST_RETRY_TTL_MS` (currently 200ms) every e2e file in this package uses.
+- **That constant has to be shared, not per-file.** `events_test.retry` is a *durable* queue —
+  it outlives any one test file's worker connection. Two files in the same suite asserting it
+  with two different `x-message-ttl` values 406-conflict against each other the moment the
+  second file's `beforeAll` runs (the same `PRECONDITION_FAILED` class `messaging.md`
+  documents between `apps/api` and the worker, just triggered between this suite's own files
+  instead). Found live while building this suite — fixed by giving every file the same
+  constant instead of letting each pick its own.
+- **Forcing a real insert failure without touching Docker.** The retry/park test needs the
+  worker's Postgres insert to fail deterministically. Rather than stopping the shared Postgres
+  container (slow, flaky, and would interfere with `apps/api`'s own e2e suite if run around
+  the same time), it publishes a message with a well-formed but nonexistent
+  `experimentId`/`variantId` — a real foreign-key violation, which fails every single time,
+  deterministically, with no infrastructure manipulation.
+
 `test/support/test-app.ts` is the shared helper every spec file uses — `createTestApp()`
 boots a real `INestApplication` with the same `ValidationPipe` options `main.ts` uses (e2e
 tests never run through `main.ts`'s `bootstrap()`, so this has to be set up by hand or DTO
@@ -104,9 +158,23 @@ splitlab_test;"`.
 they're separate schemas that don't sync themselves. Forgetting the second one means e2e
 tests fail against a stale schema even though dev works fine.
 
+**Since M10, `apps/event-processor`'s own e2e suite needs the same `splitlab_test` schema
+too** — it doesn't own migrations (`apps/api` keeps sole ownership, D3 in the M10 plan), but
+its worker still does a real `INSERT` into the physical `events` table, FK constraints and
+all. There's nothing extra to *run* here (both suites share the one `splitlab_test`
+database), just something extra to *remember*: a migration that changes `events`' shape needs
+`apps/event-processor/src/entities/event/infrastructure/event.schema.ts` updated by hand to
+match, or its column-parity unit test (`event.schema.spec.ts`) catches the drift.
+
 ## Commands
+
+Run from the relevant package (`apps/api` or, since M10, `apps/event-processor` too):
 
 - `pnpm test` — all unit tests (`*.spec.ts`)
 - `pnpm test -- manage-projects.service` — a single file (Jest's own filename filter)
 - `pnpm run test:e2e` — e2e suite, against `splitlab_test`
 - `pnpm run migration:run:test` — apply pending migrations to `splitlab_test` specifically
+  (`apps/api` only — `apps/event-processor` doesn't own migrations)
+
+Or from the root, across every package that has the script: `pnpm -w test`,
+`pnpm --filter @split-lab/api test:e2e`, `pnpm --filter @split-lab/event-processor test:e2e`.

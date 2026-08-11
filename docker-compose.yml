@@ -12,18 +12,18 @@ services:
       - postgres-data:/var/lib/postgresql/data
       - ./docker/init-test-db.sql:/docker-entrypoint-initdb.d/init-test-db.sql
 
-  redis:
-    image: redis:7-alpine
+  rabbitmq:
+    image: rabbitmq:4-management
     restart: unless-stopped
-    # AOF persistence: queued-but-unprocessed BullMQ jobs survive a Redis restart,
-    # not just a worker crash. everysec (Redis's default) fsync policy — ~1s
-    # worst-case loss window on a true crash, same trade-off Postgres makes by default.
-    command: redis-server --appendonly yes
+    environment:
+      RABBITMQ_DEFAULT_USER: splitlab
+      RABBITMQ_DEFAULT_PASS: splitlab
     ports:
-      - "6379:6379"
+      - "5672:5672"     # AMQP
+      - "15672:15672"   # management UI
     volumes:
-      - redis-data:/data
+      - rabbitmq-data:/var/lib/rabbitmq   # durable queues survive a broker restart
 
 volumes:
   postgres-data:
-  redis-data:
+  rabbitmq-data:
