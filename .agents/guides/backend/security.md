@@ -87,16 +87,22 @@ second Next.js swap doesn't have it. Current state:
   string comparison is timing-attack-vulnerable (comparison time leaks how many leading
   characters matched). Use a constant-time compare (`crypto.timingSafeEqual`) instead — demo the
   timing difference if there's time, otherwise just apply it.
-- **A08 — Software and Data Integrity Failures**: M11's third-party webhook integration needs
-  signature verification on inbound webhooks (if any) and idempotency keys on outbound calls
-  (already planned in M11's description) — without verification, anyone who guesses the webhook
-  URL can inject fake events.
+- **A08 — Software and Data Integrity Failures** — closed, M11. Every outbound webhook request
+  carries an HMAC-SHA256 signature (`X-SplitLab-Signature`, over `{timestamp}.{body}`) and a
+  timestamp header, making both tampering and replay detectable on the receiving end. Idempotency
+  keys (content-derived, `sha256(experimentId + sorted results)`) on the outbound calls prevent
+  duplicate delivery. `apps/api/src/features/push-results/results-webhook.client.ts`.
 - **A09 — Security Logging and Monitoring Failures**: no structured logging strategy yet.
   Revisit once there's something worth monitoring (M9 async events onward).
-- **A10 — Server-Side Request Forgery (SSRF)**: M11 again — if a user ever supplies a URL the
-  server fetches (a webhook target, an enrichment API), demo pointing it at
-  `http://169.254.169.254/...` (AWS instance metadata) or `localhost` to show what SSRF actually
-  lets an attacker reach, then fix with an allowlist/validation on outbound URLs.
+- **A10 — Server-Side Request Forgery (SSRF)** — closed, M11. The webhook target
+  (`RESULTS_WEBHOOK_URL`) is operator-configured via env var, never request-supplied, so
+  there's no per-request SSRF surface to begin with — but `buildWebhookConfig()`
+  (`apps/api/src/features/push-results/webhook.config.ts`) still validates the URL is
+  `https://` at boot (a `NODE_ENV=test` escape hatch exists for the e2e stub server's plain
+  `http://` target), so a fat-fingered `http://169.254.169.254/...` fails fast at startup
+  instead of silently working. If a future milestone ever lets a user supply a webhook URL
+  directly, this same validation is necessary but not sufficient — would also need to reject
+  private/link-local IP ranges, not just enforce the scheme.
 
 ## Why this shape, not a security milestone number
 

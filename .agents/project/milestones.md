@@ -161,12 +161,36 @@ planning the next one or checking what's still ahead.
       running) is deliberately deferred to M13 — see that entry below.
       63/63 `apps/api` unit tests + 16/16 e2e; 16/16 `apps/event-processor` unit tests + 5/5
       e2e. Full writeup: `.agents/guides/backend/messaging.md`.
-- [ ] **M11 — Third-party REST integration**: pick one real external API to integrate
-      (e.g. push experiment results to a Slack webhook, or pull enrichment data for events).
-      Build it properly: auth, rate-limit handling, retries with backoff, idempotency keys
-      on the outbound calls. This maps directly to the "integration with third-party REST
-      APIs" requirement — don't skip the retry/idempotency part, that's the actual skill
-      being tested.
+- [x] **M11 — Third-party REST integration**: built a generic signed outbound webhook that
+      pushes experiment results out, rather than the Slack-specific example this bullet
+      originally suggested — the developer declined creating a real Slack account, and the
+      retry/auth/idempotency skill being tested doesn't depend on the target being Slack
+      specifically. Live/manual verification target: webhook.site (free, no signup, real
+      public capture URL).
+      Done: new `POST /projects/:projectId/experiments/:id/results/push` (manual trigger,
+      chosen over auto-fire-on-completion — the latter would force a `forwardRef()` cycle
+      between `PushResultsModule` and `ManageExperimentsModule`, a real structural smell, not
+      a style call; see `third-party-integrations.md`). `ResultsWebhookClient`
+      (`apps/api/src/features/push-results/results-webhook.client.ts`) signs every request
+      with HMAC-SHA256 (`X-SplitLab-Signature`/`-Timestamp`/`-Idempotency-Key` headers),
+      retries transient failures (network errors, `408`, `429`, `5xx`) with true exponential
+      backoff (1s/2s/4s, 4 attempts total), honors `Retry-After` on `429` (capped at 30s),
+      and never retries a permanent `4xx`. Idempotency key is content-derived
+      (`sha256(experimentId + sorted results)`), backed by a `webhook_deliveries` table whose
+      `idempotencyKey` unique constraint — not the pre-check `SELECT` — is what actually
+      closes the race between two concurrent pushes; a second push of unchanged results makes
+      zero network calls.
+      HTTP client: switched mid-implementation from the originally-planned `@nestjs/axios`
+      to Node 20's native `fetch`, wrapped behind a small `WEBHOOK_HTTP` DI token
+      (`webhook.config.ts`) so specs still mock via a token like every other spec in this
+      repo, instead of stubbing a global — zero new HTTP-client dependencies added.
+      Live-verified for real: booted `pnpm dev:api`, pushed against an actual webhook.site
+      URL, confirmed the signed request (correct signature, all four headers, correct body)
+      landed via webhook.site's own API, then confirmed a second push produced zero new
+      requests. 85/85 `apps/api` unit tests (22 new) + 18/18 e2e (2 new, against a local
+      stub server — webhook.site itself isn't scriptable enough for automated retry/429
+      scenarios, only for the one live manual round-trip).
+      Full writeup: `.agents/guides/backend/third-party-integrations.md`.
 - [ ] **M12 — Second datastore (pick one)**: Elasticsearch for full-text search over
       experiments/flags, or MongoDB for the raw event log (polyglot persistence — Postgres
       stays the source of truth for entities, Mongo/ES hold something Postgres is a bad fit

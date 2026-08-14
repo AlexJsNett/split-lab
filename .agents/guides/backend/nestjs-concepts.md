@@ -98,6 +98,41 @@ site too:
 constructor(@Inject(DRIZZLE) private readonly db: NodePgDatabase<typeof schema>) {}
 ```
 
+## Custom tokens, second use case: wrapping a global for testability (M11)
+
+`DRIZZLE` above needed a token because there was no class to reflect on. `WEBHOOK_HTTP`
+(`apps/api/src/features/push-results/webhook.config.ts`) needs one for a different reason:
+Node's `fetch` is a **global function**, not a class or an injectable value at all — there's
+nothing to `@Inject()` even in principle. Calling `fetch` directly from
+`results-webhook.client.ts` would work fine at runtime, but every spec in this repo mocks
+dependencies through Nest's DI container (`{ provide: TOKEN, useValue: mock }`); a bare global
+can only be mocked by reassigning `global.fetch = jest.fn()`, which leaks across test files
+unless carefully restored and matches nothing else here.
+
+The fix: wrap the global in a plain object shaped like the one real dependency this app needs
+from it (`{ post: (url, body, headers, timeoutMs) => Promise<Response> }`), and provide *that*
+under a token like any other value:
+
+```ts
+export const WEBHOOK_HTTP = Symbol('WEBHOOK_HTTP');
+
+async function webhookFetchPost(url: string, body: string, headers: Record<string, string>, timeoutMs: number) {
+  return fetch(url, { method: 'POST', headers, body, signal: AbortSignal.timeout(timeoutMs) });
+}
+
+export const fetchWebhookHttp: WebhookHttp = { post: webhookFetchPost };
+```
+
+```ts
+// push-results.module.ts
+{ provide: WEBHOOK_HTTP, useValue: fetchWebhookHttp }
+```
+
+`ResultsWebhookClient` injects `WEBHOOK_HTTP` and never imports `fetch` directly — specs mock
+the token (`{ post: jest.fn() }`), same shape as `{ provide: DRIZZLE, useValue: db }`. Same
+technique as `DRIZZLE`, applied for the opposite reason: not "no runtime class exists," but
+"a real function exists, and it's outside DI's reach unless something wraps it."
+
 ## Module `imports`/`exports` in practice (`@Global()` modules)
 
 There's no `forFeature`-per-entity call anymore — Drizzle has no per-table repository object

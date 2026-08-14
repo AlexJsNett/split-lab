@@ -1,4 +1,4 @@
-import { Test, TestingModule } from '@nestjs/testing';
+import { Test, TestingModule, TestingModuleBuilder } from '@nestjs/testing';
 import { INestApplication, ValidationPipe } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { sql } from 'drizzle-orm';
@@ -12,10 +12,14 @@ import { DRIZZLE } from '../../src/db/drizzle.module';
 import { events } from '../../src/entities/event/infrastructure/event.schema';
 import * as schema from '../../src/db/schema';
 
-export async function createTestApp(): Promise<INestApplication<App>> {
-  const moduleFixture: TestingModule = await Test.createTestingModule({
-    imports: [AppModule],
-  }).compile();
+export async function createTestApp(
+  overrideProviders?: (builder: TestingModuleBuilder) => TestingModuleBuilder,
+): Promise<INestApplication<App>> {
+  let builder = Test.createTestingModule({ imports: [AppModule] });
+  if (overrideProviders) {
+    builder = overrideProviders(builder);
+  }
+  const moduleFixture: TestingModule = await builder.compile();
 
   const app: INestApplication<App> = moduleFixture.createNestApplication();
   // matches main.ts — DTO validation only kicks in with this pipe registered,
@@ -65,7 +69,7 @@ async function assertEventsQueueExists(app: INestApplication<App>) {
 export async function cleanDatabase(app: INestApplication<App>) {
   const db = app.get<NodePgDatabase<typeof schema>>(DRIZZLE);
   await db.execute(
-    sql`TRUNCATE TABLE events, variants, experiments, feature_flags, projects RESTART IDENTITY CASCADE`,
+    sql`TRUNCATE TABLE webhook_deliveries, events, variants, experiments, feature_flags, projects RESTART IDENTITY CASCADE`,
   );
   await purgeEventsQueue(app);
 }

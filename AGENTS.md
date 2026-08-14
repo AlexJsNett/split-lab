@@ -151,4 +151,6 @@ is the honest state, not a placeholder to ignore.
 - Back-end testing (Jest): `.agents/guides/backend/testing.md`
 - Security (OWASP Top 10 mapped to this project's actual surface): `.agents/guides/backend/security.md`
 - Async processing & messaging (RabbitMQ, formerly BullMQ): `.agents/guides/backend/messaging.md`
+- Third-party REST integration (signed webhooks, retry/backoff, idempotency):
+  `.agents/guides/backend/third-party-integrations.md`
 - Front-end data fetching: `.agents/guides/frontend/data-fetching.md`

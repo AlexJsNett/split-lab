@@ -29,8 +29,10 @@ Repo layout, `apps/api` folder architecture (FSD-inspired), and per-app tech sta
 - Full domain model + deterministic bucketing explanation: `.agents/guides/project-overview.md`
 - Full milestone list (M1–M16): `.agents/project/milestones.md`
 
-**Current milestone: M11 — Third-party REST integration** (M1–M10 done — RabbitMQ + a second
-NestJS microservice, `apps/event-processor`, landed). Open `milestones.md` for what's after it.
+**Current milestone: M12 — Second datastore** (M1–M11 done — M11 was a signed outbound
+webhook, HMAC auth + exponential backoff + content-derived idempotency, Claude-authored as an
+explicit hand-over exception; see `third-party-integrations.md`). Open `milestones.md` for
+details.
 
 ## Working agreement
 

@@ -11,6 +11,7 @@ import { ManageExperimentsModule } from '@/features/manage-experiments/manage-ex
 import { AssignVariantModule } from '@/features/assign-variant/assign-variant.module';
 import { LogConversionModule } from '@/features/log-conversion/log-conversion.module';
 import { GetResultsModule } from '@/features/get-results/get-results.module';
+import { PushResultsModule } from '@/features/push-results/push-results.module';
 
 // ScheduleModule/@nestjs/schedule and the reconciliation cron moved to
 // apps/event-processor with M10 — this app only publishes events now, it no
@@ -29,6 +30,7 @@ import { GetResultsModule } from '@/features/get-results/get-results.module';
     AssignVariantModule,
     LogConversionModule,
     GetResultsModule,
+    PushResultsModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: ApiKeyGuard },
