@@ -38,7 +38,15 @@ pnpm exec turbo run test --filter=@split-lab/event-processor
 ```
 
 **Requirements:** Node.js 20+, Docker (Postgres from M2, RabbitMQ from M10 — Redis was
-removed in M10, RabbitMQ replaced it rather than running alongside it).
+removed in M10, RabbitMQ replaced it rather than running alongside it — and Elasticsearch from
+M12, `docker compose up -d elasticsearch` / `docker-compose up -d elasticsearch` if the plain
+`docker compose` subcommand isn't installed).
+
+`apps/api` also has `pnpm run search:reindex` / `search:reindex:test` (mirrors
+`migration:run`/`migration:run:test` — its own `Pool`+Drizzle+ES `Client`, no Nest DI) —
+rebuilds both Elasticsearch indices from Postgres from scratch. Run it after
+`docker compose up -d elasticsearch` the first time, and any time the search mapping changes;
+see `.agents/guides/backend/search.md`.
 
 Another pnpm-vs-npm gotcha, for any script that takes extra CLI args: npm swallows a `--`
 separator before forwarding args to the script, pnpm forwards it **literally** as an extra
@@ -151,6 +159,7 @@ is the honest state, not a placeholder to ignore.
 - Back-end testing (Jest): `.agents/guides/backend/testing.md`
 - Security (OWASP Top 10 mapped to this project's actual surface): `.agents/guides/backend/security.md`
 - Async processing & messaging (RabbitMQ, formerly BullMQ): `.agents/guides/backend/messaging.md`
+- Full-text search (Elasticsearch, polyglot persistence): `.agents/guides/backend/search.md`
 - Third-party REST integration (signed webhooks, retry/backoff, idempotency):
   `.agents/guides/backend/third-party-integrations.md`
 - Front-end data fetching: `.agents/guides/frontend/data-fetching.md`

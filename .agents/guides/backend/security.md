@@ -77,12 +77,29 @@ second Next.js swap doesn't have it. Current state:
   deliberately naive `` `SELECT * FROM projects WHERE name = '${input}'` `` next to the safe
   parameterized version once M3 adds any search/filter endpoint, show `' OR '1'='1` breaking the
   naive one.
+  **M12 update — closed for the Elasticsearch surface**: `GET /projects/:id/search?q=...` never
+  builds a `query_string`/`simple_query_string` query from `q`, which would let raw user input
+  carry Lucene syntax (`AND`/`OR`/field-scoping, and specifically expensive leading wildcards
+  like `*ttack` that force a full term-dictionary scan). `search-catalog.service.ts` uses
+  `multi_match` instead — `q` is always treated as opaque text to match against, never as query
+  language, the same "user input is data, not syntax" principle SQL parameterization enforces,
+  applied to Elasticsearch's query DSL. Full reasoning: `search.md`.
 - **A04 — Insecure Design**: M4's assignment endpoint (`GET /experiments/:id/assign?userId=`) —
   what stops someone from hitting it with thousands of fake `userId`s to skew experiment
   results? Rate limiting / abuse detection question, revisit when M4 lands.
 - **A05 — Security Misconfiguration**: default NestJS error responses can leak stack traces;
   no `helmet`/CORS config yet. Cheap fix, do it once M3 has real endpoints worth protecting —
   add `helmet()` and explicit CORS config, disable detailed error bodies outside dev.
+  **M12 addition**: the Elasticsearch container (`docker-compose.yml`) runs with
+  `xpack.security.enabled: "false"` — plain `http://`, no auth, no TLS, anyone who can reach
+  port `9200` can read or write every index directly, bypassing `ApiKeyGuard`/
+  `ProjectOwnershipGuard` entirely (Elasticsearch has no concept of this app's per-project
+  scoping — that's enforced application-side, by the `term: { projectId }` filter every search
+  query carries, never by Elasticsearch itself). Accepted for a local/dev-only, single-node
+  learning cluster never exposed past `localhost:9200` — **not** acceptable as-is if this ever
+  runs anywhere reachable from outside the host; a real deployment needs `xpack.security.enabled:
+  true` with real credentials, same category of fix `data-layer.md`'s Postgres credentials
+  already get via env vars, not hard-coded.
 - **A07 — Identification and Authentication Failures** (M7 itself): naive `apiKey === stored`
   string comparison is timing-attack-vulnerable (comparison time leaks how many leading
   characters matched). Use a constant-time compare (`crypto.timingSafeEqual`) instead — demo the

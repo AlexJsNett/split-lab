@@ -2,6 +2,7 @@ import { DRIZZLE } from '@/db/drizzle.module';
 import * as schema from '@/db/schema';
 import { featureFlags } from '@/entities/feature-flag/infrastructure/feature-flag.schema';
 import { projects } from '@/entities/project/infrastructure/project.schema';
+import { SearchIndexerService } from '@/search/search-indexer.service';
 import { Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { and, eq } from 'drizzle-orm';
 import { NodePgDatabase } from 'drizzle-orm/node-postgres';
@@ -12,6 +13,7 @@ import { UpdateFeatureFlagDto } from './dto/update-feature-flag.dto';
 export class ManageFlagsService {
   constructor(
     @Inject(DRIZZLE) private readonly db: NodePgDatabase<typeof schema>,
+    private readonly searchIndexer: SearchIndexerService,
   ) {}
 
   async create(projectId: string, dto: CreateFeatureFlagDto) {
@@ -21,6 +23,13 @@ export class ManageFlagsService {
       .insert(featureFlags)
       .values({ projectId, ...dto })
       .returning();
+    await this.searchIndexer.indexFlag(flag.id, {
+      projectId: flag.projectId,
+      type: 'flag',
+      key: flag.key,
+      description: flag.description,
+      enabled: flag.enabled,
+    });
     return flag;
   }
 
@@ -56,6 +65,13 @@ export class ManageFlagsService {
     if (!flag) {
       throw new NotFoundException(`Flag ${id} not found`);
     }
+    await this.searchIndexer.indexFlag(flag.id, {
+      projectId: flag.projectId,
+      type: 'flag',
+      key: flag.key,
+      description: flag.description,
+      enabled: flag.enabled,
+    });
     return flag;
   }
 
@@ -69,6 +85,7 @@ export class ManageFlagsService {
     if (deleted.length === 0) {
       throw new NotFoundException(`Flag ${id} not found`);
     }
+    await this.searchIndexer.removeFlag(id);
   }
 
   private async assertProjectExists(projectId: string) {

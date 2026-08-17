@@ -37,6 +37,11 @@ apps/api/src/
                             # assertion that declares it. Connection-level sibling of db/,
                             # the same role src/queue/ (BullMQ/Redis, M9) had before M10
                             # replaced it — see messaging.md.
+  search/                  # (apps/api only, from M12) — Elasticsearch client module
+                            # (SearchModule/ELASTICSEARCH), index mappings, the write-through
+                            # indexer, and the reindex CLI. Third connection-level sibling of
+                            # db/ and messaging/ — same @Global()-module-holding-a-client
+                            # shape as DrizzleModule, a different datastore — see search.md.
 
   entities/
     project/
@@ -65,6 +70,10 @@ apps/api/src/
                              #   cron. apps/api's producers (assign-variant,
                              #   log-conversion) publish to it over the network now,
                              #   not an in-process queue — see messaging.md.
+    search-catalog/         # lands M12 — GET /projects/:id/search, the read side of
+      ...                   #   full-text search. Query-only; the write side (indexing)
+                             #   lives in manage-experiments/manage-flags' call sites
+                             #   into search/, not here — see search.md.
 ```
 
 Rule of thumb for "is this an entity or a feature": if it's a noun with a table behind it,
@@ -103,3 +112,15 @@ rules for "the worker." Two differences worth naming explicitly:
 
 Full messaging architecture (topology, retry/parking-lot design, the message contract): see
 `messaging.md`.
+
+## A feature writing to two datastores (from M12)
+
+`manage-experiments.service.ts`/`manage-flags.service.ts` are this project's first case of a
+service writing to two different stores from one request: Postgres (`this.db.insert/update/
+delete(...)`, the source of truth) and Elasticsearch (`this.searchIndexer.index*/remove*(...)`,
+a secondary search index) — always in that order, source of truth first. The rule this
+establishes for any future two-datastore feature: the secondary write happens *after* the
+primary one succeeds, and a secondary-write failure is swallowed inside the component that owns
+that datastore (`SearchIndexerService`, `search-indexer.service.ts`) — never inside the calling
+feature service, and never allowed to fail the response the primary write already earned. Full
+reasoning and the eventual-consistency trade-off this accepts: `search.md`.

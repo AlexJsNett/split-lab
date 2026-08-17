@@ -5,5 +5,6 @@ export interface Experiment {
   projectId: string;
   flagId: string | null;
   name: string;
+  description: string | null;
   status: ExperimentStatus;
 }

@@ -3,6 +3,7 @@ import * as schema from '@/db/schema';
 import { experiments } from '@/entities/experiment/infrastructure/experiment.schema';
 import { projects } from '@/entities/project/infrastructure/project.schema';
 import { variants } from '@/entities/variant/infrastructure/variant.schema';
+import { SearchIndexerService } from '@/search/search-indexer.service';
 import {
   BadRequestException,
   Inject,
@@ -18,6 +19,7 @@ import { UpdateExperimentDto } from './dto/update-experiment.dto';
 export class ManageExperimentsService {
   constructor(
     @Inject(DRIZZLE) private readonly db: NodePgDatabase<typeof schema>,
+    private readonly searchIndexer: SearchIndexerService,
   ) {}
 
   async create(projectId: string, dto: CreateExperimentDto) {
@@ -27,6 +29,14 @@ export class ManageExperimentsService {
       .insert(experiments)
       .values({ projectId, ...dto })
       .returning();
+    await this.searchIndexer.indexExperiment(experiment.id, {
+      projectId: experiment.projectId,
+      type: 'experiment',
+      name: experiment.name,
+      description: experiment.description,
+      status: experiment.status,
+      flagId: experiment.flagId,
+    });
     return experiment;
   }
 
@@ -83,6 +93,14 @@ export class ManageExperimentsService {
       .set(dto)
       .where(eq(experiments.id, id))
       .returning();
+    await this.searchIndexer.indexExperiment(updated.id, {
+      projectId: updated.projectId,
+      type: 'experiment',
+      name: updated.name,
+      description: updated.description,
+      status: updated.status,
+      flagId: updated.flagId,
+    });
     return updated;
   }
 
@@ -94,6 +112,7 @@ export class ManageExperimentsService {
     if (deleted.length === 0) {
       throw new NotFoundException(`Experiment ${id} not found`);
     }
+    await this.searchIndexer.removeExperiment(id);
   }
 
   private async assertProjectExists(projectId: string) {

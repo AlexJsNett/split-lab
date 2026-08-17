@@ -14,6 +14,10 @@ export class CreateFeatureFlagDto {
   key: string;
 
   @IsOptional()
+  @IsString()
+  description?: string;
+
+  @IsOptional()
   @IsBoolean()
   enabled?: boolean;
 

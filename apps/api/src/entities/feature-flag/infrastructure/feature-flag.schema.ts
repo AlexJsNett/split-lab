@@ -10,6 +10,7 @@ export const featureFlags = pgTable('feature_flags', {
     .notNull()
     .references(() => projects.id),
   key: varchar('key').notNull(),
+  description: varchar('description'),
   enabled: boolean('enabled').notNull().default(false),
   rolloutPercent: integer('rolloutPercent').notNull().default(0),
 });

@@ -145,3 +145,15 @@ with your own hands so it's not just theory:
    the `DROP`+`ADD` into a `RENAME COLUMN`, `migration:run`, confirm the values survived.
 
 Delete this TODO once done — the point is doing it once, not keeping it as a checklist.
+
+## Polyglot persistence: Postgres stays the source of truth (M12)
+
+M12 added Elasticsearch as a second datastore, not a Postgres replacement — Postgres remains
+the only place a row can be considered authoritative; Elasticsearch holds a secondary,
+best-effort search index that can go stale and gets rebuilt from Postgres on demand
+(`pnpm run search:reindex`), never the other way around. The connection lives in its own
+top-level `search/` folder, a sibling of `db/` (see `api-patterns.md`), following the exact
+same `@Global()` module + Symbol-token shape `DrizzleModule`/`DRIZZLE` already established —
+recognizing that one shape once means not re-deriving it for the next datastore this project
+adds. Full writeup — mapping design, sync strategy, the eventual-consistency trade-off, the
+security reasoning behind `multi_match` over `query_string`: `search.md`.

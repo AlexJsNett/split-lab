@@ -7,10 +7,19 @@ import * as amqp from 'amqplib';
 import request from 'supertest';
 import { App } from 'supertest/types';
 import type { EventMessage, EventType } from '@split-lab/events-contract';
+import { Client } from '@elastic/elasticsearch';
+import type { MappingTypeMapping } from '@elastic/elasticsearch/lib/api/types';
 import { AppModule } from '../../src/app/app.module';
 import { DRIZZLE } from '../../src/db/drizzle.module';
 import { events } from '../../src/entities/event/infrastructure/event.schema';
 import * as schema from '../../src/db/schema';
+import { ELASTICSEARCH, SEARCH_CONFIG } from '../../src/search/search.config';
+import type { SearchConfig } from '../../src/search/search.config';
+import {
+  EXPERIMENTS_MAPPING,
+  FLAGS_MAPPING,
+  INDEX_SETTINGS,
+} from '../../src/search/search-index';
 
 export async function createTestApp(
   overrideProviders?: (builder: TestingModuleBuilder) => TestingModuleBuilder,
@@ -41,7 +50,32 @@ export async function createTestApp(
   // run against this same queue.
   await assertEventsQueueExists(app);
 
+  // CLI (search:reindex) owns index creation in real usage — apps never
+  // create indices at boot (search.md). This suite is the one exception,
+  // exactly like assertEventsQueueExists above: without SOMETHING ensuring
+  // the splitlab-test-* indices exist first, the first indexExperiment/
+  // indexFlag call in a spec would hit index_not_found_exception.
+  await ensureSearchIndices(app);
+
   return app;
+}
+
+async function ensureSearchIndices(app: INestApplication<App>) {
+  const es = app.get<Client>(ELASTICSEARCH);
+  const config = app.get<SearchConfig>(SEARCH_CONFIG);
+  await ensureIndex(es, config.experimentsIndex, EXPERIMENTS_MAPPING);
+  await ensureIndex(es, config.flagsIndex, FLAGS_MAPPING);
+}
+
+async function ensureIndex(
+  es: Client,
+  index: string,
+  mappings: MappingTypeMapping,
+) {
+  const exists = await es.indices.exists({ index });
+  if (!exists) {
+    await es.indices.create({ index, mappings, settings: INDEX_SETTINGS });
+  }
 }
 
 async function assertEventsQueueExists(app: INestApplication<App>) {
@@ -72,6 +106,36 @@ export async function cleanDatabase(app: INestApplication<App>) {
     sql`TRUNCATE TABLE webhook_deliveries, events, variants, experiments, feature_flags, projects RESTART IDENTITY CASCADE`,
   );
   await purgeEventsQueue(app);
+  await cleanSearchIndices(app);
+}
+
+// delete_by_query {match_all} + refresh, not drop/recreate — keeps the
+// mapping in place between tests (ensureSearchIndices only runs once per
+// app, in createTestApp), same "reset data, not schema" split TRUNCATE has
+// with the Postgres tables above.
+export async function cleanSearchIndices(app: INestApplication<App>) {
+  const es = app.get<Client>(ELASTICSEARCH);
+  const config = app.get<SearchConfig>(SEARCH_CONFIG);
+  await es.deleteByQuery({
+    index: `${config.experimentsIndex},${config.flagsIndex}`,
+    query: { match_all: {} },
+    refresh: true,
+  });
+}
+
+// Elasticsearch only makes writes searchable after a refresh (~1s default
+// near-real-time delay) — a spec that creates then immediately searches
+// gets zero hits. Production code never forces a refresh per write (that
+// would hurt real write throughput for no real benefit); specs call this
+// explicitly before asserting instead. Never paper over this with a sleep.
+export async function refreshSearchIndices(
+  app: INestApplication<App>,
+): Promise<void> {
+  const es = app.get<Client>(ELASTICSEARCH);
+  const config = app.get<SearchConfig>(SEARCH_CONFIG);
+  await es.indices.refresh({
+    index: `${config.experimentsIndex},${config.flagsIndex}`,
+  });
 }
 
 async function purgeEventsQueue(app: INestApplication<App>) {

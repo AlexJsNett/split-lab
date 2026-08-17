@@ -24,6 +24,20 @@ services:
     volumes:
       - rabbitmq-data:/var/lib/rabbitmq   # durable queues survive a broker restart
 
+  elasticsearch:
+    image: elasticsearch:9.5.1   # Docker Hub publishes no floating :9/:9.5 tag, exact pin required
+    restart: unless-stopped
+    environment:
+      discovery.type: single-node
+      xpack.security.enabled: "false"    # dev only — plain http://, no auth/TLS
+      xpack.ml.enabled: "false"          # unused, costs memory
+      ES_JAVA_OPTS: -Xms512m -Xmx512m    # default heap is 50% of container RAM — cap it
+    ports:
+      - "9200:9200"     # REST API
+    volumes:
+      - elasticsearch-data:/usr/share/elasticsearch/data
+
 volumes:
   postgres-data:
   rabbitmq-data:
+  elasticsearch-data:

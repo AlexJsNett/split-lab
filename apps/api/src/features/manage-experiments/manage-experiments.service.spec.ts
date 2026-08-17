@@ -1,6 +1,7 @@
 import { Test } from '@nestjs/testing';
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { DRIZZLE } from '@/db/drizzle.module';
+import { SearchIndexerService } from '@/search/search-indexer.service';
 import { ManageExperimentsService } from './manage-experiments.service';
 
 type MockDb = {
@@ -66,12 +67,24 @@ function mockDelete(db: MockDb, resolvedRows: unknown[]) {
 describe('ManageExperimentsService', () => {
   let service: ManageExperimentsService;
   let db: MockDb;
+  let searchIndexer: {
+    indexExperiment: jest.Mock;
+    removeExperiment: jest.Mock;
+  };
 
   beforeEach(async () => {
     db = createMockDb();
+    searchIndexer = {
+      indexExperiment: jest.fn().mockResolvedValue(undefined),
+      removeExperiment: jest.fn().mockResolvedValue(undefined),
+    };
 
     const module = await Test.createTestingModule({
-      providers: [ManageExperimentsService, { provide: DRIZZLE, useValue: db }],
+      providers: [
+        ManageExperimentsService,
+        { provide: DRIZZLE, useValue: db },
+        { provide: SearchIndexerService, useValue: searchIndexer },
+      ],
     }).compile();
 
     service = module.get(ManageExperimentsService);
@@ -84,6 +97,7 @@ describe('ManageExperimentsService', () => {
         service.create('missing-project', { name: 'Checkout test' }),
       ).rejects.toThrow(NotFoundException);
       expect(db.insert).not.toHaveBeenCalled();
+      expect(searchIndexer.indexExperiment).not.toHaveBeenCalled();
     });
 
     it('saves the experiment scoped to the project when it exists', async () => {
@@ -94,6 +108,7 @@ describe('ManageExperimentsService', () => {
           projectId: 'project-1',
           flagId: null,
           name: 'Checkout test',
+          description: null,
           status: 'draft',
         },
       ]);
@@ -104,6 +119,46 @@ describe('ManageExperimentsService', () => {
 
       expect(valuesFn.mock.calls[0][0].projectId).toEqual('project-1');
       expect(result.id).toEqual('experiment-1');
+      expect(searchIndexer.indexExperiment).toHaveBeenCalledWith(
+        'experiment-1',
+        {
+          projectId: 'project-1',
+          type: 'experiment',
+          name: 'Checkout test',
+          description: null,
+          status: 'draft',
+          flagId: null,
+        },
+      );
+    });
+
+    // SearchIndexerService's own contract (search-indexer.service.spec.ts)
+    // guarantees indexExperiment/removeExperiment never reject — this call
+    // site trusts that contract and stays free of its own try/catch, so
+    // what matters here is that the insert().returning() has already
+    // resolved and produced the row before indexing is even attempted.
+    it('has already committed the Postgres row before indexing is attempted', async () => {
+      mockSelectWhere(db, [{ id: 'project-1', name: 'X', apiKeyHash: 'hash' }]);
+      const valuesFn = mockInsert<{ projectId: string; name: string }>(db, [
+        {
+          id: 'experiment-1',
+          projectId: 'project-1',
+          flagId: null,
+          name: 'Checkout test',
+          description: null,
+          status: 'draft',
+        },
+      ]);
+
+      const result = await service.create('project-1', {
+        name: 'Checkout test',
+      });
+
+      expect(valuesFn).toHaveBeenCalled();
+      expect(result).toMatchObject({
+        id: 'experiment-1',
+        name: 'Checkout test',
+      });
     });
   });
 
@@ -149,6 +204,7 @@ describe('ManageExperimentsService', () => {
           projectId: 'project-1',
           flagId: null,
           name: 'New name',
+          description: null,
           status: 'draft',
         },
       ]);
@@ -160,6 +216,17 @@ describe('ManageExperimentsService', () => {
       expect(db.select).toHaveBeenCalledTimes(1);
       expect(result.name).toEqual('New name');
       expect(result.status).toEqual('draft');
+      expect(searchIndexer.indexExperiment).toHaveBeenCalledWith(
+        'experiment-1',
+        {
+          projectId: 'project-1',
+          type: 'experiment',
+          name: 'New name',
+          description: null,
+          status: 'draft',
+          flagId: null,
+        },
+      );
     });
 
     it('throws BadRequestException when moving to running and weights do not sum to 100', async () => {
@@ -225,9 +292,10 @@ describe('ManageExperimentsService', () => {
       await expect(service.remove('project-1', 'missing-id')).rejects.toThrow(
         NotFoundException,
       );
+      expect(searchIndexer.removeExperiment).not.toHaveBeenCalled();
     });
 
-    it('resolves when a row was deleted', async () => {
+    it('resolves when a row was deleted, and removes it from the index', async () => {
       mockDelete(db, [
         {
           id: 'experiment-1',
@@ -240,6 +308,9 @@ describe('ManageExperimentsService', () => {
       await expect(
         service.remove('project-1', 'experiment-1'),
       ).resolves.toBeUndefined();
+      expect(searchIndexer.removeExperiment).toHaveBeenCalledWith(
+        'experiment-1',
+      );
     });
   });
 });

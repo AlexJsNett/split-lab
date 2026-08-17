@@ -12,5 +12,6 @@ export const experiments = pgTable('experiments', {
     .references(() => projects.id),
   flagId: uuid('flagId').references(() => featureFlags.id),
   name: varchar('name').notNull(),
+  description: varchar('description'),
   status: varchar('status').notNull().default('draft'),
 });

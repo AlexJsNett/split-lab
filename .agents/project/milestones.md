@@ -191,10 +191,48 @@ planning the next one or checking what's still ahead.
       stub server — webhook.site itself isn't scriptable enough for automated retry/429
       scenarios, only for the one live manual round-trip).
       Full writeup: `.agents/guides/backend/third-party-integrations.md`.
-- [ ] **M12 — Second datastore (pick one)**: Elasticsearch for full-text search over
-      experiments/flags, or MongoDB for the raw event log (polyglot persistence — Postgres
-      stays the source of truth for entities, Mongo/ES hold something Postgres is a bad fit
-      for). Pick based on which one you're weaker on.
+- [x] **M12 — Second datastore**: Elasticsearch for full-text, ranked, typo-tolerant search
+      over experiments/flags — polyglot persistence, Postgres stays the source of truth,
+      Elasticsearch holds a secondary best-effort search index that can go stale and gets
+      rebuilt from Postgres on demand, never the reverse. Claude-authored as an explicit
+      hand-over exception, same as M11.
+      Done: new top-level `apps/api/src/search/` (a third connection-level sibling of `db/`/
+      `messaging/`) — `SearchModule` (`@Global()`, mirrors `DrizzleModule`, provides
+      `ELASTICSEARCH`/`SEARCH_CONFIG`), `SearchIndexerService` (write-through, synchronous,
+      inline — every method returns `Promise<void>` and never rejects, so a downed
+      Elasticsearch never fails a Postgres write), and `reindex.ts` (CLI, `pnpm run
+      search:reindex`, mirrors `migration:run` — deletes+recreates both indices from Postgres,
+      the repair mechanism for mapping changes or a stale index). New
+      `GET /projects/:projectId/search?q=...&type=experiment|flag`
+      (`features/search-catalog/`) — merged, score-ranked results across both indices,
+      `multi_match` + `fuzziness: 'AUTO'` (typo-tolerant, ranked — the concrete reason this
+      isn't just Postgres `LIKE`), never `query_string` (a security call, not style: raw user
+      input never becomes Elasticsearch query-DSL syntax). Added a nullable `description`
+      column to both `experiments` and `feature_flags` (confirmed scope addition — `name`/`key`
+      alone were too short to make full-text search feel real). `_id` = the Postgres UUID on
+      every indexed document (upsert semantics, no-lookup delete, one identifier joins both
+      stores). Two indices (`splitlab-experiments`/`splitlab-flags`), `dynamic: 'strict'`
+      mappings, `number_of_replicas: 0` (single-node dev cluster). Test isolation via
+      `ELASTICSEARCH_INDEX_PREFIX` (`splitlab-test-*`), same trick `RABBITMQ_QUEUE=events_test`
+      already uses. e2e specs hit a real Elasticsearch container and call the new
+      `refreshSearchIndices(app)` helper before asserting — Elasticsearch's near-real-time
+      refresh means a write isn't searchable for ~1s by default; never papered over with a
+      `sleep`.
+      Live-verified for real: booted `pnpm dev:api` against the real `elasticsearch` Docker
+      Compose service, created a flag/experiment with a `description` via `curl`, confirmed
+      ranked + typo-tolerant results and cross-project isolation via `curl`, then stopped the
+      Elasticsearch container and confirmed normal CRUD still returned 200/201/204 (not 500)
+      with an error line in the API log. This live pass caught a real bug the unit tests
+      couldn't have: creating a flag *before* ever running `search:reindex` silently
+      auto-created the index with a broken dynamic mapping instead of the designed
+      "log and skip" behavior — Elasticsearch's `action.auto_create_index` defaults to
+      enabled, so the write never threw the `index_not_found_exception` the original guard was
+      built to catch. Fixed by checking `indices.exists()` explicitly before every write
+      instead of only reacting to a thrown error — see `search.md`'s "Gotcha found live"
+      section for the full story, same spirit as M10's live-wiring gotchas in `messaging.md`.
+      113/113 `apps/api` unit tests (28 new) + 25/25 e2e (7 new, against a real Elasticsearch
+      container — no mocked-cluster shortcut).
+      Full writeup: `.agents/guides/backend/search.md`.
 - [ ] **M13 — Docker Compose for the whole stack**: API + worker/microservice + web +
       Postgres + RabbitMQ + chosen second datastore, one `docker-compose up` (Redis was fully
       removed in M10 — RabbitMQ replaced it, not layered alongside it, so it's not part of
@@ -269,6 +307,18 @@ planning the next one or checking what's still ahead.
   data behind; (2) this is layered on top of, not instead of, a plain `GET /health` heartbeat
   check (already exists from M1) — health check is cheap/frequent, full-journey synthetic is
   heavier/less frequent.
+- **Structured, persisted, searchable logging** (raised by the developer 2026-08-15, while
+  scoping M12): right now `apps/api`/`apps/event-processor` only have NestJS's default console
+  logger — nothing written to a file, nothing centralized, nothing queryable once the terminal
+  scrolls past it or the process restarts. Already flagged as open in `security.md`'s A09 entry
+  ("no structured logging strategy yet"), not a new finding. Deliberately kept separate from
+  M12 rather than folded in — M12's Elasticsearch stays scoped to full-text search over
+  experiments/flags (its original purpose), not doubled up as a log store in the same
+  milestone. When this gets picked up: the natural direction is a structured logger
+  (`nestjs-pino` or similar, JSON-per-line instead of the current colored console text) writing
+  somewhere queryable — could reuse M12's Elasticsearch instance (the classic "ELK stack" use
+  case) once that exists, or stand up something dedicated. Revisit once M12/M13 land and
+  there's a real second datastore to decide against.
 
 Not a milestone, an ongoing habit: every milestone above should go through Claude Code for
 review/refactor/tests/docs at some point — that's the "daily AI-assisted workflow" line from

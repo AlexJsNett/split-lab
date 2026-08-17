@@ -29,10 +29,10 @@ Repo layout, `apps/api` folder architecture (FSD-inspired), and per-app tech sta
 - Full domain model + deterministic bucketing explanation: `.agents/guides/project-overview.md`
 - Full milestone list (M1–M16): `.agents/project/milestones.md`
 
-**Current milestone: M12 — Second datastore** (M1–M11 done — M11 was a signed outbound
-webhook, HMAC auth + exponential backoff + content-derived idempotency, Claude-authored as an
-explicit hand-over exception; see `third-party-integrations.md`). Open `milestones.md` for
-details.
+**Current milestone: M13 — Docker Compose for the whole stack** (M1–M12 done — M12 was
+Elasticsearch full-text search over experiments/flags, polyglot persistence with Postgres
+staying the source of truth, Claude-authored as an explicit hand-over exception; see
+`search.md`). Open `milestones.md` for details.
 
 ## Working agreement
 

@@ -259,3 +259,36 @@ it everywhere: `useFactory` is called with whatever `inject` lists once those pr
 and its return value becomes the actual provided value (here, the `ClientProxy` options object
 Nest uses to construct the RMQ client) — nothing new to learn each time this pattern shows up
 again.
+
+## The `DRIZZLE` shape, applied a second time to a second datastore (`ELASTICSEARCH`, M12)
+
+`search.module.ts`'s `ELASTICSEARCH` token is the "no runtime class exists" case from `DRIZZLE`
+above, not the "wrap a bare global" case `WEBHOOK_HTTP` needed — worth naming which is which,
+since M12 could plausibly have gone either way and the actual reason for the choice is a small,
+useful distinction: `@elastic/elasticsearch`'s `Client` **is** a real class (`new Client({node})`
+constructs a real instance), so in principle `@Inject(Client)`-by-class-reference could work the
+way `@InjectRepository(XEntity)` did for TypeORM. It's still given a `Symbol` token instead,
+for the same practical reason `DRIZZLE` is: the actual value provided isn't just `new Client()`
+— it's the result of a `useFactory` that needs `ConfigService` (for `ELASTICSEARCH_URL`) first,
+so *something* has to be the provider key regardless, and a `Symbol` avoids ever accidentally
+constructing a second, unconfigured `Client` instance elsewhere via a bare `new Client()`.
+Contrast with `WEBHOOK_HTTP`: that token exists because `fetch` has literally nothing to
+`@Inject()` — no class, no factory-constructible value, just a global function. `ELASTICSEARCH`
+exists because the *construction* needs DI (config), not because there's no class at all. Same
+token mechanism, two different underlying reasons — see that section above for the `WEBHOOK_HTTP`
+side of the comparison.
+
+`SearchModule` is `@Global()` and imported once in `AppModule`, exactly like `DrizzleModule` —
+every feature module needing search (today: `search-catalog`; also the write side inside
+`manage-experiments`/`manage-flags`) injects `ELASTICSEARCH`/`SEARCH_CONFIG`/
+`SearchIndexerService` without importing `SearchModule` itself. Same "used almost universally"
+justification `@Global()` needed the first time: a shared connection-level client, not a
+per-feature concern.
+
+`SearchModule implements OnModuleDestroy` and calls `client.close()` for the same reason
+`DrizzleModule` calls `pool.end()`: Nest doesn't tear down a provider's underlying resources for
+you just because the module shuts down — a service holding an open socket/connection has to
+close it explicitly in `onModuleDestroy()`, or the process (in production) leaks it until exit,
+and (in this e2e suite specifically) each spec file's `app.close()` never actually returns —
+Jest hangs on the still-open Elasticsearch HTTP keep-alive connection instead of exiting
+cleanly.

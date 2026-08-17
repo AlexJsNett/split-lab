@@ -8,4 +8,8 @@ export class CreateExperimentDto {
   @IsOptional()
   @IsString()
   flagId?: string;
+
+  @IsOptional()
+  @IsString()
+  description?: string;
 }
