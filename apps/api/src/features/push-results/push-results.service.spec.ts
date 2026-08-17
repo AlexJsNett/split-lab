@@ -19,11 +19,16 @@ function createMockDb(): MockDb {
 }
 
 function mockInsertOnConflict(db: MockDb, resolvedRows: unknown[]) {
-  const valuesFn = jest.fn().mockReturnValue({
-    onConflictDoNothing: jest.fn().mockReturnValue({
-      returning: jest.fn().mockResolvedValue(resolvedRows),
-    }),
-  });
+  const valuesFn = jest
+    .fn<
+      { onConflictDoNothing: jest.Mock },
+      [{ experimentId: string; idempotencyKey: string }]
+    >()
+    .mockReturnValue({
+      onConflictDoNothing: jest.fn().mockReturnValue({
+        returning: jest.fn().mockResolvedValue(resolvedRows),
+      }),
+    });
   db.insert.mockReturnValueOnce({ values: valuesFn });
   return valuesFn;
 }
@@ -115,12 +120,8 @@ describe('PushResultsService', () => {
     mockUpdateWhere(db);
     await service.pushResults('project-1', 'experiment-1');
 
-    const firstKey = (
-      firstValues.mock.calls[0][0] as { idempotencyKey: string }
-    ).idempotencyKey;
-    const secondKey = (
-      secondValues.mock.calls[0][0] as { idempotencyKey: string }
-    ).idempotencyKey;
+    const firstKey = firstValues.mock.calls[0][0].idempotencyKey;
+    const secondKey = secondValues.mock.calls[0][0].idempotencyKey;
     expect(firstKey).toEqual(secondKey);
   });
 

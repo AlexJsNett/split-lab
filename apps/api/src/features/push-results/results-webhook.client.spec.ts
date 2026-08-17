@@ -3,7 +3,7 @@ import {
   ResultsWebhookClient,
   WebhookDeliveryFailedError,
 } from './results-webhook.client';
-import type { WebhookConfig, WebhookHttp } from './webhook.config';
+import type { WebhookConfig } from './webhook.config';
 
 function fakeResponse(
   status: number,
@@ -24,14 +24,16 @@ const CONFIG: WebhookConfig = {
   timeoutMs: 5000,
 };
 
+type PostCall = [string, string, Record<string, string>, number];
+
 describe('ResultsWebhookClient', () => {
-  let http: { post: jest.Mock };
+  let http: { post: jest.Mock<Promise<Response>, PostCall> };
   let client: ResultsWebhookClient;
 
   beforeEach(() => {
     jest.useFakeTimers();
-    http = { post: jest.fn() };
-    client = new ResultsWebhookClient(CONFIG, http as unknown as WebhookHttp);
+    http = { post: jest.fn<Promise<Response>, PostCall>() };
+    client = new ResultsWebhookClient(CONFIG, http);
   });
 
   afterEach(() => {
@@ -46,12 +48,7 @@ describe('ResultsWebhookClient', () => {
     expect(result).toEqual({ status: 200, attempts: 1 });
     expect(http.post).toHaveBeenCalledTimes(1);
 
-    const [url, body, headers, timeoutMs] = http.post.mock.calls[0] as [
-      string,
-      string,
-      Record<string, string>,
-      number,
-    ];
+    const [url, body, headers, timeoutMs] = http.post.mock.calls[0];
     expect(url).toEqual(CONFIG.url);
     expect(timeoutMs).toEqual(CONFIG.timeoutMs);
     expect(body).toEqual(JSON.stringify({ variantId: 'v1' }));
@@ -190,9 +187,7 @@ describe('ResultsWebhookClient', () => {
     await jest.advanceTimersByTimeAsync(2000);
     await resultPromise;
 
-    const headerSets = http.post.mock.calls.map(
-      (call) => call[2] as Record<string, string>,
-    );
+    const headerSets = http.post.mock.calls.map((call) => call[2]);
     const keys = headerSets.map((h) => h['X-SplitLab-Idempotency-Key']);
     const signatures = headerSets.map((h) => h['X-SplitLab-Signature']);
     expect(new Set(keys).size).toEqual(1);

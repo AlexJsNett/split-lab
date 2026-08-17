@@ -38,7 +38,6 @@ export async function startWebhookStub(): Promise<WebhookStub> {
   return {
     url: `http://127.0.0.1:${port}/webhook`,
     requests,
-    close: () =>
-      new Promise<void>((resolve) => server.close(() => resolve())),
+    close: () => new Promise<void>((resolve) => server.close(() => resolve())),
   };
 }

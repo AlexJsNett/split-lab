@@ -22,9 +22,12 @@
     "test:e2e": "NODE_ENV=test jest --config ./test/jest-e2e.json --runInBand",
     "migration:generate": "drizzle-kit generate",
     "migration:run": "ts-node -r tsconfig-paths/register src/db/migrate.ts",
-    "migration:run:test": "NODE_ENV=test ts-node -r tsconfig-paths/register src/db/migrate.ts"
+    "migration:run:test": "NODE_ENV=test ts-node -r tsconfig-paths/register src/db/migrate.ts",
+    "search:reindex": "ts-node -r tsconfig-paths/register src/search/reindex.ts",
+    "search:reindex:test": "NODE_ENV=test ts-node -r tsconfig-paths/register src/search/reindex.ts"
   },
   "dependencies": {
+    "@elastic/elasticsearch": "^9.5.0",
     "@nestjs/common": "11.1.18",
     "@nestjs/config": "^4.0.4",
     "@nestjs/core": "11.1.18",
@@ -67,7 +70,7 @@
     "ts-node": "^10.9.2",
     "tsconfig-paths": "^4.2.0",
     "tsconfig-paths-webpack-plugin": "^4.2.0",
-    "typescript": "^5.7.3",
+    "typescript": "^6.0.3",
     "typescript-eslint": "^8.20.0"
   },
   "jest": {
