@@ -3,6 +3,7 @@ import { ConfigModule } from '@nestjs/config';
 import { ScheduleModule } from '@nestjs/schedule';
 import { DrizzleModule } from '@/db/drizzle.module';
 import { ProcessEventsModule } from '@/features/process-events/process-events.module';
+import { HealthModule } from '@/features/health/health.module';
 
 @Module({
   imports: [
@@ -12,6 +13,7 @@ import { ProcessEventsModule } from '@/features/process-events/process-events.mo
     }),
     ScheduleModule.forRoot(),
     DrizzleModule,
+    HealthModule,
     ProcessEventsModule,
   ],
 })

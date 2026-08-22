@@ -292,3 +292,36 @@ close it explicitly in `onModuleDestroy()`, or the process (in production) leaks
 and (in this e2e suite specifically) each spec file's `app.close()` never actually returns —
 Jest hangs on the still-open Elasticsearch HTTP keep-alive connection instead of exiting
 cleanly.
+
+## Hybrid applications: one Nest process, HTTP *and* a microservice (`apps/event-processor`, M13)
+
+Before M13, `apps/event-processor`'s `main.ts` called `NestFactory.createMicroservice(AppModule, {...})`
+— that factory function returns an app that speaks *only* the transport you configured (RabbitMQ
+here), with no HTTP server at all. `NestFactory.create(AppModule)`, by contrast, is the
+"ordinary" bootstrap every `apps/api` request handler runs under — a real HTTP server, nothing
+else. A **hybrid application** is neither alone: call `NestFactory.create()` to get a normal
+HTTP-capable app, then `app.connectMicroservice({ transport: ..., options: ... })` to *attach* a
+second transport to that same app instance, then explicitly start both:
+
+```ts
+const app = await NestFactory.create(AppModule);
+app.connectMicroservice<MicroserviceOptions>({ transport: Transport.RMQ, options: { ... } });
+await app.startAllMicroservices();   // starts consuming on the attached transport(s)
+await app.listen(3000);              // starts the HTTP server
+```
+
+Both `@Controller()` HTTP routes and `@EventPattern()`/`@MessagePattern()` message handlers can
+coexist in the same `AppModule` under a hybrid app — Nest doesn't care that `HealthController`
+is HTTP-only and `ProcessEventsController` is RMQ-only, both just get wired into whichever
+transport(s) the app was connected to.
+
+**The two `await`s are ordered on purpose, not just "call both eventually":**
+`startAllMicroservices()` is what actually asserts the RabbitMQ queue and registers the
+consumer (via `assertTopology()` + the `ServerRMQ` Nest constructs internally) — until it
+resolves, this worker isn't consuming anything yet. Calling `app.listen()` *before* that would
+open the HTTP port (and start answering `GET /health` with 200) while the worker was still
+mid-boot — exactly the "container started but isn't actually ready" gap M13 needed a real
+answer for (`apps/api` publishes with `noAssert: true`, so a request served too early gets
+silently dropped by RabbitMQ with no error anywhere — see `docker.md`). Awaiting
+`startAllMicroservices()` first makes "the health check passes" a true statement about the
+worker's real readiness, not just "the Node process didn't crash."

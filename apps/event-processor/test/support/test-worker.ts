@@ -6,19 +6,16 @@ import { config as loadEnv } from 'dotenv';
 // is only ever imported by *.e2e-spec.ts, which always runs against .env.test.
 loadEnv({ path: '.env.test' });
 
-import { INestMicroservice } from '@nestjs/common';
-import { NestFactory } from '@nestjs/core';
+import { INestApplication } from '@nestjs/common';
 import {
   ClientProxy,
   ClientProxyFactory,
-  MicroserviceOptions,
   Transport,
 } from '@nestjs/microservices';
 import * as amqp from 'amqplib';
 import { Pool } from 'pg';
-import { AppModule } from '@/app/app.module';
-import { assertTopology } from '@/messaging/assert-topology';
-import { buildTopology, EventsTopology } from '@/messaging/topology';
+import { createWorkerApp } from '@/app/main';
+import { EventsTopology } from '@/messaging/topology';
 
 // Every *.e2e-spec.ts file in this suite must assert 'events_test.retry'
 // with the SAME x-message-ttl — the queue is durable and outlives any one
@@ -38,39 +35,22 @@ function requiredEnv(name: string): string {
 }
 
 export interface TestWorker {
-  app: INestMicroservice;
+  app: INestApplication;
   topology: EventsTopology;
   close: () => Promise<void>;
 }
 
-// Test-only equivalent of src/app/main.ts's bootstrap — the same
-// assertTopology-then-createMicroservice sequence, parameterized so
-// retry-timing tests can pass a small retryTtlMs instead of being gated on
-// real 5-second sleeps (test plan, M10).
+// Calls the exact same bootstrap sequence production main.ts uses
+// (src/app/main.ts's createWorkerApp — assertTopology, connectMicroservice,
+// await startAllMicroservices()), parameterized so retry-timing tests can
+// pass a small retryTtlMs instead of being gated on real 5-second sleeps
+// (test plan, M10). One implementation, not a duplicate — the M13 hybrid-app
+// ordering is now exercised by every e2e test that boots a worker, not just
+// production traffic.
 export async function startTestWorker(
   retryTtlMs?: number,
 ): Promise<TestWorker> {
-  const url = requiredEnv('RABBITMQ_URL');
-  const queue = requiredEnv('RABBITMQ_QUEUE');
-  const topology = buildTopology(queue, retryTtlMs);
-
-  await assertTopology(url, topology);
-
-  const app = await NestFactory.createMicroservice<MicroserviceOptions>(
-    AppModule,
-    {
-      transport: Transport.RMQ,
-      options: {
-        urls: [url],
-        queue: topology.queue,
-        queueOptions: { durable: true, arguments: topology.queueArguments },
-        noAck: false,
-        prefetchCount: 10,
-      },
-    },
-  );
-  await app.listen();
-
+  const { app, topology } = await createWorkerApp(retryTtlMs);
   return { app, topology, close: () => app.close() };
 }
 

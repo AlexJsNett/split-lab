@@ -1,0 +1,40 @@
+# The build context is tarred and sent to the Docker daemon before anything
+# else runs — without this file that tar ships the host's macOS/arm64
+# node_modules (breaks native binaries like sharp inside a linux image),
+# every dist/.next build output, and every .env secret. Mirrors .gitignore,
+# but Docker doesn't read .gitignore on its own — this file is separate and
+# required.
+#
+# Every pattern below has BOTH a bare form and a `**/` form — confirmed the
+# hard way (M13 code review): unlike .gitignore, a bare pattern in
+# .dockerignore only matches at the context ROOT, not at any depth. Without
+# the `**/` form, apps/event-processor/.env (real RabbitMQ/DB config, not a
+# placeholder) got copied into the image and silently overrode a container
+# env var at runtime — an actual live bug, not a style nit. Never assume a
+# bare pattern here is recursive.
+node_modules
+**/node_modules
+dist
+**/dist
+.next
+**/.next
+.turbo
+**/.turbo
+coverage
+**/coverage
+.git
+*.tsbuildinfo
+**/*.tsbuildinfo
+.DS_Store
+**/.DS_Store
+.omc
+**/.omc
+
+*.env
+**/*.env
+.env
+**/.env
+.env.*
+**/.env.*
+!.env.example
+!**/.env.example

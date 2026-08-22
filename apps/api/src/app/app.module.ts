@@ -14,6 +14,7 @@ import { LogConversionModule } from '@/features/log-conversion/log-conversion.mo
 import { GetResultsModule } from '@/features/get-results/get-results.module';
 import { PushResultsModule } from '@/features/push-results/push-results.module';
 import { SearchCatalogModule } from '@/features/search-catalog/search-catalog.module';
+import { HealthModule } from '@/features/health/health.module';
 
 // ScheduleModule/@nestjs/schedule and the reconciliation cron moved to
 // apps/event-processor with M10 — this app only publishes events now, it no
@@ -26,6 +27,7 @@ import { SearchCatalogModule } from '@/features/search-catalog/search-catalog.mo
     }),
     DrizzleModule,
     SearchModule,
+    HealthModule,
     ManageProjectsModule,
     ManageFlagsModule,
     ManageVariantsModule,

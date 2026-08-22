@@ -1,0 +1,23 @@
+{
+  "name": "stack-e2e",
+  "version": "0.0.1",
+  "private": true,
+  "description": "M13 (D8) golden-path black-box test: assign -> conversion -> results against the whole real stack running together (both apps/api and apps/event-processor actually up). Deliberately depends on neither app — only jest/ts-jest and the platform fetch() — so it stays an honest black-box test and never needs a fragile cross-package dev dependency (see .agents/guides/backend/docker.md).",
+  "scripts": {
+    "e2e": "jest",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "devDependencies": {
+    "@types/jest": "^30.0.0",
+    "@types/node": "^24.0.0",
+    "jest": "^30.0.0",
+    "ts-jest": "^29.2.5",
+    "typescript": "^6.0.3"
+  },
+  "jest": {
+    "preset": "ts-jest",
+    "testEnvironment": "node",
+    "testRegex": ".*\\.spec\\.ts$",
+    "testTimeout": 30000
+  }
+}

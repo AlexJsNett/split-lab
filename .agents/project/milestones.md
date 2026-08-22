@@ -233,16 +233,56 @@ planning the next one or checking what's still ahead.
       113/113 `apps/api` unit tests (28 new) + 25/25 e2e (7 new, against a real Elasticsearch
       container — no mocked-cluster shortcut).
       Full writeup: `.agents/guides/backend/search.md`.
-- [ ] **M13 — Docker Compose for the whole stack**: API + worker/microservice + web +
+- [x] **M13 — Docker Compose for the whole stack**: API + worker/microservice + web +
       Postgres + RabbitMQ + chosen second datastore, one `docker-compose up` (Redis was fully
       removed in M10 — RabbitMQ replaced it, not layered alongside it, so it's not part of
       this list). This is also the natural home for the live cross-service golden-path e2e
-      test M10 deliberately deferred (D8): a real black-box test hitting `POST /assign` then
+      test M10 deliberately deferred (D8): a real black-box test hitting `GET /assign` then
       `POST /conversions` then `GET /results` against the whole stack running together —
       `apps/api` and `apps/event-processor` both actually up, not each tested in isolation the
       way M10's two separate e2e suites do it. Wiring that inside a single Jest run pre-M13
       would need a fragile cross-package dev dependency; once the whole stack is one
       `docker-compose up`, it's a natural fit instead.
+      Claude-authored as an explicit hand-over exception, same as M12 — the developer
+      reviewed the plan (`.omc/plans/m13-docker-compose-whole-stack.md`) and locked 4 design
+      decisions before implementation started (see that file's header). Planning surfaced two
+      real gaps the milestone list itself had been carrying: `GET /health` didn't actually
+      exist (the M1-era route was deleted in M7 and never came back), and the golden-path
+      routes described above were wrong until this edit (`assign` is a `GET`, not a `POST`).
+      Done: three Dockerfiles (`apps/api`, `apps/event-processor`, `apps/web` — multi-stage,
+      root build context because `@split-lab/events-contract` lives outside any single app
+      folder, `deps`/`build`/`runtime` layers, `apps/api` also gets a `tooling` target for
+      migrations). `apps/api` gained a real, shallow `GET /health`. `apps/event-processor`
+      became a Nest **hybrid app** — HTTP added alongside its existing RabbitMQ microservice,
+      ordered so `app.listen()` only opens *after* `startAllMicroservices()` resolves, which
+      makes its health check a true "this worker is actually consuming" signal instead of
+      just "the process didn't crash" (real hazard found during planning: `apps/api` publishes
+      with `noAssert: true`, so a request served before the worker finishes booting gets
+      silently dropped by RabbitMQ). `docker-compose.yml` extended with healthchecks on every
+      service (Postgres `pg_isready`, RabbitMQ `rabbitmq-diagnostics ping`, Elasticsearch
+      waits for **yellow** — a single-node cluster never reaches green — plus the three app
+      services), a one-shot `migrate` service (`service_completed_successfully`, not an
+      entrypoint script — keeps a migration failure visible as one failed job instead of a
+      crash-looping app), and `api` published on host port **3001** (not 3000) so the compose
+      stack and `pnpm dev:api` can both run without fighting over a port. The D8 golden-path
+      test lives in a new workspace package, `tests/stack-e2e` (added `tests/*` to
+      `pnpm-workspace.yaml`), importing nothing from either app — it runs as its own container
+      inside a fully separate, nothing-published `docker-compose.e2e.yml` stack
+      (`-p splitlab-e2e`, `pnpm e2e:stack` → `scripts/stack-e2e.sh`), so it can run
+      concurrently with the dev stack with zero port collisions and drops into a CI Docker
+      network unmodified whenever M14 needs it. A genuine pre-existing gap surfaced during
+      live verification, fixed as part of this milestone: `uuid_generate_v4()` (used by every
+      table's `id` default) depended on the `uuid-ossp` Postgres extension having been enabled
+      by hand at some point on the original dev machine — no migration or init script ever
+      created it, so a truly fresh `docker compose up` failed on the very first `CREATE TABLE`.
+      Fixed in `docker/init-test-db.sql` (both `splitlab` and `splitlab_test`), which is what
+      the host-run e2e suites' Postgres container also uses — the fix isn't M13-only. Also
+      surfaced, left as a known gap for a future milestone (not fixed here — out of scope,
+      `apps/web` frontend logic): the dashboard's `GET /projects` call never sends
+      `x-api-key`, so it 401s and silently renders "No projects yet." regardless of what's
+      actually in the database; `apiFetch`'s "return null on non-2xx" design means this fails
+      silently instead of visibly.
+      Full writeup: `.agents/guides/backend/docker.md`.
 - [ ] **M14 — CI hardening + AWS**: test gate in CI, path-based triggers so web/api build
       independently. Then a real deploy target on AWS (EC2 for the containers, S3 for static
       assets, Lambda if a piece of this naturally fits serverless) — this is explicitly a
@@ -305,7 +345,9 @@ planning the next one or checking what's still ahead.
   account needs an identifiable pattern (e.g. `synthetic-monitor+<timestamp>@...`) plus a
   separate cleanup sweep job, so a mid-run crash before the delete step doesn't leave junk
   data behind; (2) this is layered on top of, not instead of, a plain `GET /health` heartbeat
-  check (already exists from M1) — health check is cheap/frequent, full-journey synthetic is
+  check (M1's original route was deleted in M7 and stayed gone until M13 re-added it —
+  shallow on purpose, see `docker.md` — this note used to claim it "already exists from M1,"
+  which was stale) — health check is cheap/frequent, full-journey synthetic is
   heavier/less frequent.
 - **Structured, persisted, searchable logging** (raised by the developer 2026-08-15, while
   scoping M12): right now `apps/api`/`apps/event-processor` only have NestJS's default console

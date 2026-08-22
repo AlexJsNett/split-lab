@@ -48,6 +48,29 @@ rebuilds both Elasticsearch indices from Postgres from scratch. Run it after
 `docker compose up -d elasticsearch` the first time, and any time the search mapping changes;
 see `.agents/guides/backend/search.md`.
 
+**Whole stack in one command (M13):** `docker compose up --build` (or `docker-compose up
+--build` — same fallback as above) now brings up all six services together — the three infra
+containers above plus `apps/api`, `apps/event-processor`, and `apps/web`, wired to talk to
+each other over the compose network, migrations applied automatically by a one-shot `migrate`
+service. `api` is published on host port **3001**, not 3000 — `pnpm dev:api` already owns 3000
+for the non-Docker workflow, and the two are meant to coexist. `web` is on its own host port
+(see `docker-compose.yml`); `event-processor` publishes nothing (no reason for host access to
+it — its `GET /health` exists only for the Docker healthcheck). Reindex against the compose
+stack: `docker compose run --rm migrate pnpm run search:reindex`. The host-run `test:e2e`
+suites (both apps) are unaffected — they still expect infra-only on `localhost`, same as
+before M13; don't `docker compose up` the apps themselves while running those, only the infra
+services. Full explanation of every decision behind this (why a `tooling` build target, why
+Elasticsearch's healthcheck waits for yellow not green, why `event-processor` became a hybrid
+app, why `localhost` inside a container isn't the host): `.agents/guides/backend/docker.md`.
+
+**Live cross-service golden-path e2e (M13, D8):** `pnpm e2e:stack` — brings up a fully
+separate, isolated compose stack (`-p splitlab-e2e`, `docker-compose.e2e.yml`, nothing
+published to the host), runs a black-box test (`tests/stack-e2e`, its own workspace package,
+imports nothing from either app) that hits `GET /assign` → `POST /conversions` → `GET
+/results` against both `apps/api` and `apps/event-processor` actually running together, then
+tears everything down — even on failure. Safe to run while the dev stack from `docker compose
+up` is also running; they don't share ports, volumes, or a network.
+
 Another pnpm-vs-npm gotcha, for any script that takes extra CLI args: npm swallows a `--`
 separator before forwarding args to the script, pnpm forwards it **literally** as an extra
 argument — which breaks yargs-based CLIs that don't expect a bare `--` in their argv. Fix:
@@ -98,8 +121,9 @@ Monorepo, npm workspaces, one root git repo.
 | -------------------------- | ------------------------------------------------------------------ | -------------------------- |
 | `apps/web`                 | Next.js (App Router, TS) + Tailwind — UI only, no DB/logic          | M6: read-only dashboard   |
 | `apps/api`                 | NestJS — all domain logic, DB, auth, publishes events over RabbitMQ | M10 landed (M1–M10 done)  |
-| `apps/event-processor`     | NestJS microservice (no HTTP) — consumes exposure/conversion events over RabbitMQ, own Postgres connection | M10 landed |
+| `apps/event-processor`     | NestJS — consumes exposure/conversion events over RabbitMQ, own Postgres connection; a hybrid app since M13 (HTTP added solely for `GET /health`, see `docker.md`) | M10 landed, M13 added HTTP |
 | `packages/events-contract` | `@split-lab/events-contract` — the `EventMessage` type + pattern constants shared by `apps/api` and `apps/event-processor`, nothing else | M10 landed |
+| `tests/stack-e2e`          | `stack-e2e` — M13's D8 golden-path black-box test, runs against a real composed stack, imports nothing from either app | M13 landed |
 
 Import boundary: `apps/web` talks to `apps/api` only over HTTP (fetch calls to REST
 endpoints). It never imports backend code, never touches the DB directly.
@@ -160,6 +184,7 @@ is the honest state, not a placeholder to ignore.
 - Security (OWASP Top 10 mapped to this project's actual surface): `.agents/guides/backend/security.md`
 - Async processing & messaging (RabbitMQ, formerly BullMQ): `.agents/guides/backend/messaging.md`
 - Full-text search (Elasticsearch, polyglot persistence): `.agents/guides/backend/search.md`
+- Docker & Docker Compose (multi-stage builds, healthchecks, the whole-stack dev workflow, the isolated e2e stack): `.agents/guides/backend/docker.md`
 - Third-party REST integration (signed webhooks, retry/backoff, idempotency):
   `.agents/guides/backend/third-party-integrations.md`
 - Front-end data fetching: `.agents/guides/frontend/data-fetching.md`

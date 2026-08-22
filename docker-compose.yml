@@ -11,6 +11,11 @@ services:
     volumes:
       - postgres-data:/var/lib/postgresql/data
       - ./docker/init-test-db.sql:/docker-entrypoint-initdb.d/init-test-db.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U splitlab -d splitlab"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
 
   rabbitmq:
     image: rabbitmq:4-management
@@ -23,6 +28,11 @@ services:
       - "15672:15672"   # management UI
     volumes:
       - rabbitmq-data:/var/lib/rabbitmq   # durable queues survive a broker restart
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
 
   elasticsearch:
     image: elasticsearch:9.5.1   # Docker Hub publishes no floating :9/:9.5 tag, exact pin required
@@ -36,6 +46,179 @@ services:
       - "9200:9200"     # REST API
     volumes:
       - elasticsearch-data:/usr/share/elasticsearch/data
+    healthcheck:
+      # wait_for_status=yellow, NEVER green — a single-node cluster can't
+      # replicate its shards anywhere, so it sits at yellow forever by
+      # design. Waiting for green here would hang until the healthcheck's
+      # own retries run out and never actually pass.
+      test:
+        [
+          "CMD-SHELL",
+          "curl -fsS 'http://localhost:9200/_cluster/health?wait_for_status=yellow&timeout=5s' || exit 1",
+        ]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+      start_period: 60s   # JVM boot is slow; failures here don't count against retries
+
+  # One-shot job, not a long-running service (M13, D3) — `restart: "no"` plus
+  # `service_completed_successfully` below is what makes this "run once,
+  # wait for exit code 0" rather than "start, then loop." An entrypoint
+  # script that migrated-then-started-the-server would couple schema
+  # changes to process start and make a migration failure look like a
+  # crash-looping app instead of one clearly-failed job in `docker compose ps`.
+  migrate:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+      target: tooling
+    command: pnpm run migration:run
+    restart: "no"
+    environment:
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      DB_USER: splitlab
+      DB_PASSWORD: splitlab
+      DB_NAME: splitlab
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  # Second one-shot job, same shape as `migrate` — reindex.ts *deletes and
+  # recreates* both ES indices (search.md), so it must run exactly once
+  # against an empty index, not on every container start. Without this, a
+  # truly fresh `docker compose up` never creates the indices at all:
+  # SearchIndexerService's own indices.exists() guard silently skips every
+  # write, and GET /search 500s with index_not_found_exception the first
+  # time anyone hits it — M12's whole feature would be dead in the stack
+  # M13 ships. `api` waits on this completing before serving traffic (below).
+  reindex:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+      target: tooling
+    command: pnpm run search:reindex
+    restart: "no"
+    environment:
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      DB_USER: splitlab
+      DB_PASSWORD: splitlab
+      DB_NAME: splitlab
+      ELASTICSEARCH_URL: http://elasticsearch:9200
+      ELASTICSEARCH_INDEX_PREFIX: splitlab
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+      target: runtime
+    restart: unless-stopped
+    environment:
+      PORT: "3000"
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      DB_USER: splitlab
+      DB_PASSWORD: splitlab
+      DB_NAME: splitlab
+      RABBITMQ_URL: amqp://splitlab:splitlab@rabbitmq:5672
+      RABBITMQ_QUEUE: events
+      ELASTICSEARCH_URL: http://elasticsearch:9200
+      ELASTICSEARCH_INDEX_PREFIX: splitlab
+      # getOrThrow at boot (webhook.config.ts) — must be present even though
+      # nothing in this stack calls out to a real webhook. https:// is
+      # required outside NODE_ENV=test (SSRF guard), so a real-looking but
+      # unused webhook.site URL, not a bare placeholder string.
+      # example.invalid is an RFC 2606-reserved domain, guaranteed to never
+      # resolve — safe if this ever actually gets called by accident (a real
+      # webhook.site URL would receive genuine traffic; this can't).
+      RESULTS_WEBHOOK_URL: https://example.invalid/webhook
+      RESULTS_WEBHOOK_SECRET: dev-secret
+      RESULTS_WEBHOOK_TIMEOUT_MS: "5000"
+    # Published on 3001, not 3000 — `pnpm dev:api` already owns host port
+    # 3000 for the non-Docker workflow, and the two are meant to coexist
+    # without fighting over a port (M13, OQ6).
+    ports:
+      - "3001:3000"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3000/health || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      elasticsearch:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+      reindex:
+        condition: service_completed_successfully
+      event-processor:
+        condition: service_healthy
+
+  event-processor:
+    build:
+      context: .
+      dockerfile: apps/event-processor/Dockerfile
+      target: runtime
+    restart: unless-stopped
+    environment:
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      DB_USER: splitlab
+      DB_PASSWORD: splitlab
+      DB_NAME: splitlab
+      RABBITMQ_URL: amqp://splitlab:splitlab@rabbitmq:5672
+      RABBITMQ_QUEUE: events
+    # No published port — nothing outside the compose network ever needs to
+    # reach this service directly, `GET /health` exists only for the
+    # healthcheck below and docker-compose's own `--wait`/`depends_on`.
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3000/health || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      target: runtime
+    restart: unless-stopped
+    # Known pre-existing gap (M6, not introduced by M13): apiFetch()
+    # (apps/web/app/_shared/lib/api.ts) never sends x-api-key, and every
+    # route it calls is behind ApiKeyGuard — so the dashboard 401s and
+    # silently renders empty lists ("No projects yet.") regardless of what's
+    # actually in the database. The container boots and the network wiring
+    # is correct; the dashboard itself has nothing to authenticate with yet.
+    environment:
+      # Read at request time in a Server Component (apps/web/app/_shared/lib/
+      # api.ts), not NEXT_PUBLIC_* — nothing needed baking in at `next build`
+      # time, so this alone is enough. The browser never talks to `api`
+      # directly; only this container does, over the compose network.
+      API_URL: http://api:3000
+    ports:
+      - "5174:3000"   # next dev already owns 5173 on the host; a different port here too
+    depends_on:
+      api:
+        condition: service_healthy
 
 volumes:
   postgres-data:

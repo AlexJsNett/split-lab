@@ -29,10 +29,11 @@ Repo layout, `apps/api` folder architecture (FSD-inspired), and per-app tech sta
 - Full domain model + deterministic bucketing explanation: `.agents/guides/project-overview.md`
 - Full milestone list (M1–M16): `.agents/project/milestones.md`
 
-**Current milestone: M13 — Docker Compose for the whole stack** (M1–M12 done — M12 was
-Elasticsearch full-text search over experiments/flags, polyglot persistence with Postgres
-staying the source of truth, Claude-authored as an explicit hand-over exception; see
-`search.md`). Open `milestones.md` for details.
+**Current milestone: M14 — CI hardening + AWS** (M1–M13 done — M13 was Docker Compose for the
+whole stack, one `docker compose up` bringing up API + worker + web + Postgres + RabbitMQ +
+Elasticsearch together, plus the M10-deferred live cross-service golden-path e2e
+(`pnpm e2e:stack`), Claude-authored as an explicit hand-over exception like M12; see
+`docker.md`). Open `milestones.md` for details.
 
 ## Working agreement
 
