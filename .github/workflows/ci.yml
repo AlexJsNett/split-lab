@@ -13,7 +13,49 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  build:
+  # Decides which jobs below even need to start. This is where the real cost
+  # lives — checkout, Node setup, and a full `pnpm install` of the whole
+  # workspace all happen *after* this, so skipping a job here skips paying
+  # for any of that. Deliberately NOT a workflow-level `on: paths:` filter —
+  # a job/workflow skipped that way reports nothing at all (not even
+  # "skipped"), which would leave `ci-ok` (and `deploy`, which depends on
+  # it) waiting forever on a check that never resolves. Gating individual
+  # jobs with `if:` instead means a skipped job reports "skipped", a real
+  # conclusion `ci-ok` can read.
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      web: ${{ steps.filter.outputs.web }}
+      backend: ${{ steps.filter.outputs.backend }}
+      shared: ${{ steps.filter.outputs.shared }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # dorny/paths-filter needs history to diff against, same reason as V2's turbo filter
+
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            web:
+              - 'apps/web/**'
+            backend:
+              - 'apps/api/**'
+              - 'apps/event-processor/**'
+              - 'packages/events-contract/**'
+              - 'docker/**'
+              - 'docker-compose*.yml'
+            shared:
+              - 'package.json'
+              - 'pnpm-lock.yaml'
+              - 'pnpm-workspace.yaml'
+              - 'turbo.json'
+              - '.nvmrc'
+              - '.github/workflows/**'
+
+  backend:
+    needs: [changes]
+    if: needs.changes.outputs.backend == 'true' || needs.changes.outputs.shared == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -47,12 +89,73 @@ jobs:
           key: turbo-${{ runner.os }}-${{ github.job }}-${{ github.sha }}
           restore-keys: turbo-${{ runner.os }}-${{ github.job }}-
 
-      # Full run on push to main; PRs narrow to packages affected since the base branch.
-      # A task a package doesn't define is skipped, not failed.
+      # Full run on push to main; PRs narrow to backend packages affected since the base branch.
+      # A task a package doesn't define is skipped, not failed. events-contract isn't listed
+      # explicitly — turbo.json's dependsOn: ["^build"] pulls it in automatically as a build
+      # dependency of api/event-processor regardless of the filter.
       - name: Lint, typecheck, test, build
         run: |
           if [ "${{ github.event_name }}" = "pull_request" ]; then
-            pnpm exec turbo run lint typecheck test build --filter="...[origin/${{ github.base_ref }}]"
+            pnpm exec turbo run lint typecheck test build \
+              --filter="@split-lab/api...[origin/${{ github.base_ref }}]" \
+              --filter="@split-lab/event-processor...[origin/${{ github.base_ref }}]"
           else
-            pnpm exec turbo run lint typecheck test build
+            pnpm exec turbo run lint typecheck test build \
+              --filter=@split-lab/api \
+              --filter=@split-lab/event-processor
           fi
+
+  web:
+    needs: [changes]
+    if: needs.changes.outputs.web == 'true' || needs.changes.outputs.shared == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Cache Turbo
+        uses: actions/cache@v4
+        with:
+          path: .turbo/cache
+          key: turbo-${{ runner.os }}-${{ github.job }}-${{ github.sha }}
+          restore-keys: turbo-${{ runner.os }}-${{ github.job }}-
+
+      - name: Lint, typecheck, build
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            pnpm exec turbo run lint typecheck build --filter="web...[origin/${{ github.base_ref }}]"
+          else
+            pnpm exec turbo run lint typecheck build --filter=web
+          fi
+
+  # The single thing anything downstream (branch protection if it's ever added back, Step 5's
+  # deploy job today) should depend on. needs: every job above, if: always() so it still runs
+  # even when one of them failed, and it fails itself if any dependency's result was
+  # "failure" or "cancelled" — "skipped" is fine, that's the whole point of the path filters.
+  ci-ok:
+    needs: [changes, backend, web]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check gate results
+        run: |
+          if [ "${{ needs.backend.result }}" = "failure" ] || [ "${{ needs.backend.result }}" = "cancelled" ]; then
+            echo "backend job: ${{ needs.backend.result }}"
+            exit 1
+          fi
+          if [ "${{ needs.web.result }}" = "failure" ] || [ "${{ needs.web.result }}" = "cancelled" ]; then
+            echo "web job: ${{ needs.web.result }}"
+            exit 1
+          fi
+          echo "all gates passed or were correctly skipped"
