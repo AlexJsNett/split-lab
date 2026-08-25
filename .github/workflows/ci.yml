@@ -162,6 +162,12 @@ jobs:
       RABBITMQ_QUEUE: events_test
       ELASTICSEARCH_URL: http://localhost:9200
       ELASTICSEARCH_INDEX_PREFIX: splitlab-test
+      # getOrThrow at boot (webhook.config.ts) — nothing here calls out to a real webhook, but
+      # the config key must exist. example.invalid is RFC 2606-reserved, guaranteed to never
+      # resolve, matching docker-compose.yml's own placeholder.
+      RESULTS_WEBHOOK_URL: https://example.invalid/webhook
+      RESULTS_WEBHOOK_SECRET: ci-test-secret
+      RESULTS_WEBHOOK_TIMEOUT_MS: "5000"
     services:
       postgres:
         image: postgres:16-alpine
