@@ -270,3 +270,37 @@ jobs:
             exit 1
           fi
           echo "all gates passed or were correctly skipped"
+
+  # Render's Auto-Deploy used to fire on every push to main, completely decoupled from CI —
+  # this job replaces that wire. push-only (a PR must never deploy), gated on ci-ok, so a push
+  # with a failing test produces no new Render deploy on any of the three services. No path
+  # filter here — a deploy always considers all three, since a Render dashboard sanity check
+  # costs a couple of minutes on a free tier and "deploy only what changed" is real added
+  # complexity for no real savings at this scale.
+  #
+  # The three Deploy Hook URLs ARE secrets — anyone holding one can trigger a deploy of that
+  # service on demand — unlike the e2e job's plain env: values, which are non-confidential
+  # local-infra credentials. Read into env: from secrets, curl'd via the shell variable, never
+  # string-interpolated directly into the run: command, so GitHub's log-masking definitely
+  # catches it. -f makes curl fail the step on a non-2xx response instead of swallowing an
+  # error page as success.
+  deploy:
+    needs: [ci-ok]
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Deploy api
+        env:
+          HOOK_URL: ${{ secrets.RENDER_DEPLOY_HOOK_API }}
+        run: curl -f -X POST "$HOOK_URL"
+
+      - name: Deploy event-processor
+        env:
+          HOOK_URL: ${{ secrets.RENDER_DEPLOY_HOOK_EVENTS }}
+        run: curl -f -X POST "$HOOK_URL"
+
+      - name: Deploy web
+        env:
+          HOOK_URL: ${{ secrets.RENDER_DEPLOY_HOOK_WEB }}
+        run: curl -f -X POST "$HOOK_URL"
