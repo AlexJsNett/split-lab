@@ -187,4 +187,16 @@ is the honest state, not a placeholder to ignore.
 - Docker & Docker Compose (multi-stage builds, healthchecks, the whole-stack dev workflow, the isolated e2e stack): `.agents/guides/backend/docker.md`
 - Third-party REST integration (signed webhooks, retry/backoff, idempotency):
   `.agents/guides/backend/third-party-integrations.md`
+- CI (GitHub Actions — the deploy gate vs. merge gate distinction, path filtering, e2e service
+  containers, the post-deploy smoke test, real gotchas found live): `.agents/guides/backend/ci.md`
 - Front-end data fetching: `.agents/guides/frontend/data-fetching.md`
+
+## CI (M14)
+
+`.github/workflows/ci.yml` runs on every push/PR to `main`: lint/typecheck/test/build, split
+into path-filtered `backend`/`web` jobs behind a `ci-ok` aggregator, plus an `e2e` job against
+real Postgres/RabbitMQ/Elasticsearch service containers. What actually triggers a Render
+deploy is **not** the push itself — Render's own Auto-Deploy is off on all three services —
+it's `ci-ok` succeeding on a push to `main` (`deploy` job, gated `needs: [ci-ok]`, calls each
+service's Deploy Hook). A `smoke` job then runs the real cross-service golden-path test
+against the live Render URLs, `needs: [deploy]`. Full reasoning: `ci.md`.

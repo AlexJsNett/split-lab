@@ -283,10 +283,44 @@ planning the next one or checking what's still ahead.
       actually in the database; `apiFetch`'s "return null on non-2xx" design means this fails
       silently instead of visibly.
       Full writeup: `.agents/guides/backend/docker.md`.
-- [ ] **M14 — CI hardening + AWS**: test gate in CI, path-based triggers so web/api build
+- [x] **M14 — CI hardening + AWS**: test gate in CI, path-based triggers so web/api build
       independently. Then a real deploy target on AWS (EC2 for the containers, S3 for static
       assets, Lambda if a piece of this naturally fits serverless) — this is explicitly a
       "plus," treat it as the stretch milestone once M1–M13 are solid.
+      **Deviation from the original wording, on the record**: the "AWS" half landed on
+      **Render (free tier) + CloudAMQP + Render Postgres instead of EC2/S3/Lambda** — the
+      developer didn't want to register a credit card for AWS to test-deploy a learning
+      project. `apps/api`/`apps/event-processor`/`apps/web` each run as a Render Web Service
+      (Docker environment, pointing at their existing M13 Dockerfiles); RabbitMQ is a CloudAMQP
+      free "Little Lemur" instance; Postgres is a Render free instance (migrations/`uuid-ossp`
+      bootstrap run once by hand against its external hostname over TLS, since the free plan
+      has no shell/one-off-job access). Live and verified end-to-end with a real golden-path
+      curl sequence (create project/flag/experiment/variants → start experiment → `GET
+      /assign` → poll `GET /results`) against the actually-running deployed services.
+      Done, CI half: `.github/workflows/ci.yml` (existed since the repo's first commit,
+      hardened rather than authored from scratch — see `ci.md`'s framing) now runs
+      lint/typecheck/e2e/build behind path-filtered `backend`/`web` jobs and a `ci-ok`
+      aggregator; the 10 e2e suites (7 `apps/api`, 3 `apps/event-processor`) run against real
+      Postgres/RabbitMQ/Elasticsearch via GitHub Actions `services:` containers for the first
+      time ever, having never run in CI before this milestone. Coverage thresholds now exist
+      and are enforced (measured honestly — real numbers, not 100%, recorded in `testing.md`
+      as a ratchet, not silently hidden). The developer, from experience on a past project,
+      wanted the opposite of a PR-gated-merge flow: push straight to `main` stays exactly as
+      it was, but the **Render deploy** now waits on `ci-ok` — Render's Auto-Deploy is off on
+      all three services, replaced by a `ci.yml` job that calls each service's Deploy Hook
+      only after CI passes. A `smoke` job then runs the M13 golden-path suite
+      (`tests/stack-e2e`) against the live Render URLs after every real deploy — replacing the
+      original idea of re-running the isolated `docker-compose.e2e.yml` stack in CI (rejected
+      outright, including on a schedule, not merely deferred). Two genuine GitHub Actions
+      gotchas were found and fixed by breaking things on purpose and watching real runs, not
+      from documentation (a job's custom `if:` silently drops the implicit `success()` check
+      on its `needs:`; a job auto-skips whenever *anything* in its transitive needs graph was
+      skipped, not just its direct need) — both fully written up in `ci.md` since they're easy
+      to reintroduce by accident. Also found and fixed live: a real, reproducible e2e flake
+      (`deleteByQuery`'s default `conflicts: 'abort'` throwing on a single Elasticsearch
+      version conflict between fast-running tests), only surfaced because this milestone ran
+      the e2e suites repeatedly in CI for the first time.
+      Full writeup: `.agents/guides/backend/ci.md`.
 - [ ] **M15 — Client SDK**: a small npm package (`packages/sdk` or standalone), modeled after
       GrowthBook's JS/Node SDK — deliberately copy the shape to learn it, not to reinvent it.
       Fetches flag/experiment config from `apps/api` for a project (by `apiKey`), does the
@@ -336,8 +370,10 @@ planning the next one or checking what's still ahead.
   revisit once there's more UI (especially once forms/mutations exist, where there's actual
   logic worth covering). This is the deploy-time check — runs once per change, against the
   test DB, same shape as `apps/api`'s own `test:e2e`.
-- **Production synthetic monitoring** (belongs with M14, once a real AWS prod environment
-  exists — doesn't apply yet, there's no prod, only local dev + `splitlab_test`): a scheduled
+- **Production synthetic monitoring** (belongs with a future milestone — a real prod
+  environment now *does* exist as of M14, on Render, so this note's original premise "doesn't
+  apply yet, there's no prod" is stale; whether to actually build this is still a separate
+  milestone's call, not something M14 did): a scheduled
   job (every few minutes) running a full-journey script against the *real* prod system —
   signup → log out → log in → exercise a small **critical/golden-path** subset of
   functionality (not the whole app — keep this fast and cheap to run continuously, unlike the

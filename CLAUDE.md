@@ -29,11 +29,12 @@ Repo layout, `apps/api` folder architecture (FSD-inspired), and per-app tech sta
 - Full domain model + deterministic bucketing explanation: `.agents/guides/project-overview.md`
 - Full milestone list (M1–M16): `.agents/project/milestones.md`
 
-**Current milestone: M14 — CI hardening + AWS** (M1–M13 done — M13 was Docker Compose for the
-whole stack, one `docker compose up` bringing up API + worker + web + Postgres + RabbitMQ +
-Elasticsearch together, plus the M10-deferred live cross-service golden-path e2e
-(`pnpm e2e:stack`), Claude-authored as an explicit hand-over exception like M12; see
-`docker.md`). Open `milestones.md` for details.
+**Current milestone: M15 — Client SDK** (M1–M14 done — M14 hardened the pre-existing CI into a
+real gate: path-filtered jobs, e2e suites running against real Postgres/RabbitMQ/Elasticsearch
+in CI for the first time, and a Render deploy that now waits on CI passing instead of firing
+independently. The "AWS" half landed on Render free tier + CloudAMQP instead of EC2/S3/Lambda —
+no credit card wanted for a learning project — live-verified end-to-end; see `ci.md`).
+Open `milestones.md` for details.
 
 ## Working agreement
 
