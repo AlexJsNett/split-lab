@@ -18,7 +18,8 @@ async function main() {
     // is false because these providers commonly present a cert Node's
     // default CA bundle won't validate — this only skips certificate-chain
     // trust, DB_USER/DB_PASSWORD auth is unaffected either way.
-    ssl: process.env.DB_SSL === 'true' ? { rejectUnauthorized: false } : undefined,
+    ssl:
+      process.env.DB_SSL === 'true' ? { rejectUnauthorized: false } : undefined,
   });
   const db = drizzle(pool);
   await migrate(db, { migrationsFolder: './src/migrations' });
