@@ -120,6 +120,15 @@ export async function cleanSearchIndices(app: INestApplication<App>) {
     index: `${config.experimentsIndex},${config.flagsIndex}`,
     query: { match_all: {} },
     refresh: true,
+    // Default conflicts: 'abort' throws the whole call out on a single
+    // version_conflict_engine_exception — real and observed in CI: a doc a
+    // just-finished test wrote (indexExperiment awaited, but ES's own
+    // internal seqNo bookkeeping can lag a beat behind the write API
+    // resolving) loses a race against this cleanup's own delete pass.
+    // 'proceed' skips the conflicting doc instead of erroring — it survives
+    // one extra pass and gets swept on the next cleanDatabase call, which
+    // is harmless since nothing asserts on it in the meantime.
+    conflicts: 'proceed',
   });
 }
 
