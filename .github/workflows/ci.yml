@@ -286,13 +286,19 @@ jobs:
   # error page as success.
   deploy:
     needs: [ci-ok]
-    # A custom `if:` on a job with `needs:` DROPS the implicit success() check GitHub applies
-    # by default — needs.ci-ok.result == 'success' has to be written explicitly, or this job
-    # runs on every push regardless of whether ci-ok actually passed. Confirmed the hard way:
-    # a live red-then-green test showed "skipped" both times by coincidence (a genuinely
-    # failed dependency still short-circuits things some other way) — this line is what
-    # actually makes it safe on purpose rather than by luck.
-    if: github.event_name == 'push' && needs.ci-ok.result == 'success'
+    # Two DIFFERENT GitHub Actions behaviors stacked here, both confirmed the hard way with
+    # live runs, not from docs alone:
+    # 1) A custom `if:` on a job with `needs:` drops the implicit success() check — without
+    #    needs.ci-ok.result == 'success' written explicitly, this job would run on every push
+    #    regardless of whether ci-ok actually passed.
+    # 2) GitHub also auto-skips a job whenever ANY job anywhere upstream in its transitive
+    #    needs graph — not just its direct needs — was itself skipped, even when the direct
+    #    need (ci-ok) genuinely succeeded. Observed live: deploy silently no-op'd on every push
+    #    where path filtering skipped the `web` job (a shared/backend-only change), 2 for 2,
+    #    while ci-ok correctly reported success both times. always() is what opts back out of
+    #    that auto-skip; combined with the explicit result check above, this is now correct on
+    #    purpose in both directions rather than by luck.
+    if: always() && github.event_name == 'push' && needs.ci-ok.result == 'success'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -322,7 +328,10 @@ jobs:
   # Same if: pitfall as `deploy` above — needs.deploy.result == 'success' has to be explicit.
   smoke:
     needs: [deploy]
-    if: github.event_name == 'push' && needs.deploy.result == 'success'
+    # Same two-part condition as `deploy` above, same reason — this job's transitive needs
+    # graph runs through deploy -> ci-ok -> [changes, backend, web, e2e], and a skipped `web`
+    # anywhere in that chain would silently no-op this job too without always().
+    if: always() && github.event_name == 'push' && needs.deploy.result == 'success'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     env:
