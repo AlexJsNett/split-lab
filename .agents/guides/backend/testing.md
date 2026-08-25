@@ -3,6 +3,33 @@
 100% coverage policy (see `AGENTS.md`) means tests land with every milestone, not deferred to
 M8 — M8 is "close any remaining gaps," not "write the first test."
 
+**Honest status as of M14 (2026-08-25): the policy is not actually at 100% yet.**
+`coverageThreshold` was added to both apps' Jest config for the first time in M14 — before
+that, nothing enforced the 100% claim, only discipline did, and measuring for real (`pnpm
+run test:cov`) turned up a real gap rather than confirming the policy was already met:
+
+| Package | Statements | Branches | Functions | Lines |
+|---|---|---|---|---|
+| `apps/api` | 60.65% | 59.38% | 58.45% | 61.85% |
+| `apps/event-processor` | 66.66% | 61.70% | 61.11% | 67.66% |
+
+Where the gap actually is, from reading the coverage report, not guessing: mostly
+`app.module.ts`/`main.ts` (bootstrap wiring, exercised by e2e/manual runs, never a unit
+`.spec.ts` target) and several controllers/DTOs sitting at 0% direct unit coverage —
+`manage-variants.controller.ts`, `push-results.controller.ts`, `search-catalog.controller.ts`
+and their DTOs among them. AGENTS.md's testing convention explicitly wants controllers/DTOs
+unit-tested too (not just covered indirectly through e2e), so this is a real backlog item, not
+a false alarm — these controllers work today (the e2e suites exercise them over real HTTP,
+which is where their line coverage numbers below 100% but above 0% partly come from), they
+just don't have their own `.spec.ts` files yet.
+
+`coverageThreshold` in each package's `package.json` is set to the measured floor above
+(floored to the integer below), **not 100** — a ratchet, not the target. M14 was scoped to
+*enforcing* coverage, not writing the tests needed to close the gap (see M14's plan
+guardrails: "no new test content"), so raising these numbers is left as real, tracked future
+work — bump the threshold up as each gap gets closed, milestone by milestone, until it reaches
+100 and this note can be deleted.
+
 ## Unit tests: service/logic classes, mocked Drizzle client
 
 Convention established in `manage-projects.service.spec.ts` (rewritten for Drizzle): mock the
