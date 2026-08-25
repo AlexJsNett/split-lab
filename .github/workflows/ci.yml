@@ -6,9 +6,16 @@ on:
   pull_request:
     branches: [main]
 
+# A new push to the same ref cancels whatever's still running for the previous
+# one — free-tier minutes aren't worth spending on a superseded commit.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
         with:
