@@ -15,4 +15,3 @@ export class HealthController {
     return { status: 'ok' };
   }
 }
-// M14 step 6: verify deploy/smoke fire correctly when web is path-filtered out (backend-only change)
