@@ -12,6 +12,13 @@ async function main() {
     user: process.env.DB_USER,
     password: process.env.DB_PASSWORD,
     database: process.env.DB_NAME,
+    // Opt-in only: local Docker Postgres has no TLS listener, but a managed
+    // host reachable over the public internet (e.g. Render's external
+    // hostname) refuses a plaintext connection outright. rejectUnauthorized
+    // is false because these providers commonly present a cert Node's
+    // default CA bundle won't validate — this only skips certificate-chain
+    // trust, DB_USER/DB_PASSWORD auth is unaffected either way.
+    ssl: process.env.DB_SSL === 'true' ? { rejectUnauthorized: false } : undefined,
   });
   const db = drizzle(pool);
   await migrate(db, { migrationsFolder: './src/migrations' });
