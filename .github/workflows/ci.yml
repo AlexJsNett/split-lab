@@ -139,12 +139,113 @@ jobs:
             pnpm exec turbo run lint typecheck build --filter=web
           fi
 
+  # The 10 e2e suites (7 apps/api, 3 apps/event-processor) have never run in CI before this —
+  # they live under test/, outside turbo's rootDir, behind a separate test:e2e script no task
+  # references. This is the highest-value job in the whole plan: these are the tests that
+  # actually exercise Postgres + RabbitMQ + Elasticsearch together, not mocks.
+  e2e:
+    needs: [changes]
+    if: needs.changes.outputs.backend == 'true' || needs.changes.outputs.shared == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      # Plain values, not secrets — local-infra credentials with nothing confidential about
+      # them, matching docker-compose.yml exactly. Secrets that aren't secret make the real
+      # ones (Step 5's Deploy Hooks) harder to spot later.
+      NODE_ENV: test
+      DB_HOST: localhost
+      DB_PORT: "5432"
+      DB_USER: splitlab
+      DB_PASSWORD: splitlab
+      DB_NAME: splitlab_test
+      RABBITMQ_URL: amqp://splitlab:splitlab@localhost:5672
+      RABBITMQ_QUEUE: events_test
+      ELASTICSEARCH_URL: http://localhost:9200
+      ELASTICSEARCH_INDEX_PREFIX: splitlab-test
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: splitlab
+          POSTGRES_PASSWORD: splitlab
+          POSTGRES_DB: splitlab
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U splitlab -d splitlab"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+      rabbitmq:
+        image: rabbitmq:4-management
+        env:
+          RABBITMQ_DEFAULT_USER: splitlab
+          RABBITMQ_DEFAULT_PASS: splitlab
+        ports: ["5672:5672"]
+        options: >-
+          --health-cmd "rabbitmq-diagnostics -q ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+      elasticsearch:
+        image: elasticsearch:9.5.1
+        env:
+          discovery.type: single-node
+          xpack.security.enabled: "false"
+          xpack.ml.enabled: "false"
+          ES_JAVA_OPTS: -Xms512m -Xmx512m
+        ports: ["9200:9200"]
+        options: >-
+          --health-cmd "curl -fsS 'http://localhost:9200/_cluster/health?wait_for_status=yellow&timeout=5s' || exit 1"
+          --health-interval 10s
+          --health-timeout 10s
+          --health-retries 10
+          --health-start-period 60s
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      # services: has no volumes: — the compose file's uuid-ossp + splitlab_test bootstrap
+      # (docker/init-test-db.sql) can't be mounted here, so it runs as an explicit step
+      # instead, against the default `splitlab` database psql connects to before
+      # `splitlab_test` even exists. Same file as compose uses — cannot drift out of sync.
+      - name: Bootstrap uuid-ossp + splitlab_test
+        run: psql "postgresql://splitlab:splitlab@localhost:5432/splitlab" -f docker/init-test-db.sql
+        env:
+          PGPASSWORD: splitlab
+
+      # events-contract isn't a turbo task in this job (test:e2e is invoked directly, not
+      # through turbo — V6/V7), and this is a fresh runner with no artifacts from other jobs,
+      # so its dist/ build has to happen explicitly before anything imports it.
+      - name: Build events-contract
+        run: pnpm --filter @split-lab/events-contract build
+
+      - name: Apply migrations to splitlab_test
+        run: pnpm --filter @split-lab/api migration:run:test
+
+      # Destructive-but-idempotent against a database that was empty seconds ago — safe here.
+      - name: Build search indices
+        run: pnpm --filter @split-lab/api search:reindex:test
+
+      - name: apps/api e2e
+        run: pnpm --filter @split-lab/api test:e2e
+
+      - name: apps/event-processor e2e
+        run: pnpm --filter @split-lab/event-processor test:e2e
+
   # The single thing anything downstream (branch protection if it's ever added back, Step 5's
   # deploy job today) should depend on. needs: every job above, if: always() so it still runs
   # even when one of them failed, and it fails itself if any dependency's result was
   # "failure" or "cancelled" — "skipped" is fine, that's the whole point of the path filters.
   ci-ok:
-    needs: [changes, backend, web]
+    needs: [changes, backend, web, e2e]
     if: always()
     runs-on: ubuntu-latest
     steps:
@@ -156,6 +257,10 @@ jobs:
           fi
           if [ "${{ needs.web.result }}" = "failure" ] || [ "${{ needs.web.result }}" = "cancelled" ]; then
             echo "web job: ${{ needs.web.result }}"
+            exit 1
+          fi
+          if [ "${{ needs.e2e.result }}" = "failure" ] || [ "${{ needs.e2e.result }}" = "cancelled" ]; then
+            echo "e2e job: ${{ needs.e2e.result }}"
             exit 1
           fi
           echo "all gates passed or were correctly skipped"
