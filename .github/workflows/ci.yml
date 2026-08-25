@@ -310,3 +310,43 @@ jobs:
         env:
           HOOK_URL: ${{ secrets.RENDER_DEPLOY_HOOK_WEB }}
         run: curl -f -X POST "$HOOK_URL"
+
+  # Real post-deploy smoke test — not a disposable copy of the stack, the actual live one.
+  # golden-path.spec.ts already reads STACK_BASE_URL with no localhost fallback (built for the
+  # isolated splitlab-e2e compose network, M13) — the same property that made it safe there
+  # makes it equally usable against a live target, unmodified. No services: block, no infra to
+  # stand up — this is a plain Jest suite making HTTP requests against endpoints that are
+  # already live, which is also why it's cheap enough to run on every push, not just a
+  # schedule (deliberately rejected — see ci.md once it exists).
+  #
+  # Same if: pitfall as `deploy` above — needs.deploy.result == 'success' has to be explicit.
+  smoke:
+    needs: [deploy]
+    if: github.event_name == 'push' && needs.deploy.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      STACK_BASE_URL: https://split-lab.onrender.com
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      # Deploy lag is real and unverified as of writing this — a Deploy Hook POST isn't
+      # instantaneous, so the first request here could hit a still-booting instance. If this
+      # step turns out flaky for that reason, add a short bounded retry against GET /health
+      # before the suite proper — not a blind sleep, measure the actual lag first.
+      - name: Golden-path smoke test against live Render
+        run: pnpm --filter stack-e2e e2e
+
+      # On red: this job going red IS the alarm (no automated rollback, by design — see D10 in
+      # the M14 plan). The human response is checking this log, then Render's dashboard
+      # "Rollback" button on whichever service looks broken. Nothing here does that
+      # automatically, on purpose.
