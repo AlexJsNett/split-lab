@@ -284,6 +284,18 @@ jobs:
   # string-interpolated directly into the run: command, so GitHub's log-masking definitely
   # catches it. -f makes curl fail the step on a non-2xx response instead of swallowing an
   # error page as success.
+  deploy-debug:
+    needs: [ci-ok]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Dump context
+        run: |
+          echo "event_name=${{ github.event_name }}"
+          echo "needs.ci-ok.result=${{ needs.ci-ok.result }}"
+          echo "expr=${{ needs.ci-ok.result == 'success' }}"
+          echo "combined=${{ github.event_name == 'push' && needs.ci-ok.result == 'success' }}"
+
   deploy:
     needs: [ci-ok]
     # A custom `if:` on a job with `needs:` DROPS the implicit success() check GitHub applies
