@@ -286,7 +286,13 @@ jobs:
   # error page as success.
   deploy:
     needs: [ci-ok]
-    if: github.event_name == 'push'
+    # A custom `if:` on a job with `needs:` DROPS the implicit success() check GitHub applies
+    # by default — needs.ci-ok.result == 'success' has to be written explicitly, or this job
+    # runs on every push regardless of whether ci-ok actually passed. Confirmed the hard way:
+    # a live red-then-green test showed "skipped" both times by coincidence (a genuinely
+    # failed dependency still short-circuits things some other way) — this line is what
+    # actually makes it safe on purpose rather than by luck.
+    if: github.event_name == 'push' && needs.ci-ok.result == 'success'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
