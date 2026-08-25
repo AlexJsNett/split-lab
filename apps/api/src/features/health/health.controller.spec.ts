@@ -7,3 +7,9 @@ describe('HealthController', () => {
     expect(controller.check()).toEqual({ status: 'ok' });
   });
 });
+
+describe('deliberate M14 gate re-verify, revert immediately', () => {
+  it('should fail on purpose', () => {
+    expect(true).toBe(false);
+  });
+});
