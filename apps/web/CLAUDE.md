@@ -16,7 +16,10 @@ Tailwind for components, plain server-side `fetch` (`cache: "no-store"`) for dat
 client-state library, since the dashboard is currently 100% read-only Server Components.
 
 **React Aria** (`react-aria-components`) is the planned choice for complex interactive form
-components (date range picker for M16's results filtering, combobox, etc.) — decided
-2026-08-11, **not added yet**, same "don't add speculatively" discipline as M6: wait until
-there's a real form screen that actually needs it. (Simple forms like login/signup don't
-count — see whichever milestone/plan adds the first real form screen for the concrete call.)
+components (date range picker for M17's results filtering, combobox, etc.) — decided
+2026-08-11, **not added yet** as of M14. M15 (multi-user auth) is the first real form screen
+(login/signup) — the "don't add speculatively" discipline would normally have waited longer
+(a plain login form doesn't need a combobox/date-picker library), but the developer
+explicitly asked to install React Aria as part of M15 anyway, reasoning it'll be useful soon
+regardless — see `.omc/plans/oauth-multi-user-auth.md` for the full call. Once M15 lands,
+this note should be updated to say React Aria is in, not planned.

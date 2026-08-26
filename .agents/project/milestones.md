@@ -321,36 +321,52 @@ planning the next one or checking what's still ahead.
       version conflict between fast-running tests), only surfaced because this milestone ran
       the e2e suites repeatedly in CI for the first time.
       Full writeup: `.agents/guides/backend/ci.md`.
-- [ ] **M15 — Client SDK**: a small npm package (`packages/sdk` or standalone), modeled after
+- [ ] **M15 — Multi-user auth**: real user accounts for `apps/web`'s admin dashboard — Google
+      OAuth + GitHub OAuth + email/password with mandatory email verification, each user
+      creates and owns their own project(s). Raised 2026-08-26 after the developer tried to
+      actually use the deployed dashboard and hit a known M6 gap (`apiFetch` never sends
+      `x-api-key`, every request 401s, dashboard silently shows "No projects yet."). Rejected
+      the small fix (one env var holding one project's key) in favor of the real feature.
+      Claude-authored as an explicit hand-over exception, same pattern as M11–M14 — the
+      developer reviewed the plan and locked the open questions before implementation started
+      (see `.omc/plans/oauth-multi-user-auth.md`). **Key architectural constraint discovered
+      during planning**: `onrender.com` is on the Public Suffix List, so `apps/api` and
+      `apps/web`'s separate `*.onrender.com` subdomains can never share a cookie — forces a
+      thin BFF in `apps/web` (session cookie on the `web` origin only, `apiFetch` forwards
+      `Authorization: Bearer <token>` to `apps/api` server-side; `apps/api` itself stays a pure
+      header-auth REST API that never reads a cookie, which also makes it structurally
+      CSRF-immune). Not started as of this entry — implementation awaits the developer's
+      explicit go-ahead.
+- [ ] **M16 — Client SDK**: a small npm package (`packages/sdk` or standalone), modeled after
       GrowthBook's JS/Node SDK — deliberately copy the shape to learn it, not to reinvent it.
       Fetches flag/experiment config from `apps/api` for a project (by `apiKey`), does the
       deterministic bucketing **locally** (no round-trip per evaluation), exposes something
       like `client.isOn('flag-key')` / `client.getExperimentVariant(id, userId)`. Config
       caching + a refresh/poll interval. This is the actual "SDK" skill GrowthBook is known
       for — the hard part is local evaluation matching server-side bucketing exactly.
-- [ ] **M16 — Analytics / results dashboard**: push `apps/web` results screens closer to
+- [ ] **M17 — Analytics / results dashboard**: push `apps/web` results screens closer to
       GrowthBook's actual results UI — per-variant exposures/conversions/conversion rate
       (already have the numbers from M5), plus a simple confidence indicator or interval,
       and a time-series view of exposures/conversions over the experiment's run. Copy
       GrowthBook's layout/approach as closely as practical to learn from it first; diverge
       once you have your own ideas about what's missing or worth doing differently.
 
-- [ ] **M17 — MCP server**: expose split-lab's data (projects, flags, experiments, variants,
+- [ ] **M18 — MCP server**: expose split-lab's data (projects, flags, experiments, variants,
       results) as MCP tools/resources, so an MCP-compatible AI client (Claude Desktop, Claude
-      Code, Cursor, or the in-app chat from M18) can query analytics data directly instead of
+      Code, Cursor, or the in-app chat from M19) can query analytics data directly instead of
       through the REST API by hand. Start read-only (list projects, get experiment results,
       check a flag's rollout) — writes (create a flag, start an experiment) are a deliberate
-      stretch, not the M17 baseline, since an AI-triggered mutation needs more thought about
-      confirmation/scoping than a read does. **Not from `target-stack.md`** — unlike M9–M16,
+      stretch, not the M18 baseline, since an AI-triggered mutation needs more thought about
+      confirmation/scoping than a read does. **Not from `target-stack.md`** — unlike M9–M17,
       this doesn't map to a job-requirement line (the AI-related lines there are about *you*
       using AI assistants day-to-day, already closed; this is a product feature). This is your
       own direction: growing split-lab from "GrowthBook clone" toward "GrowthBook +
       Amplitude's built-in AI chat" — worth being explicit that the motivation is different
       from every other milestone in this list.
-- [ ] **M18 — In-app AI chat**: a slide-out chat panel in `apps/web`'s admin dashboard (open
+- [ ] **M19 — In-app AI chat**: a slide-out chat panel in `apps/web`'s admin dashboard (open
       from the side, like Amplitude's), backed by an LLM on the API side that answers
       questions about the signed-in project's data ("how's the checkout experiment doing",
-      "which flags are enabled") by calling the same M17 MCP tools server-side — a tool-calling
+      "which flags are enabled") by calling the same M18 MCP tools server-side — a tool-calling
       loop, not a raw unstructured prompt. Each user supplies their **own** LLM API key
       (OpenAI/Anthropic/etc — bring-your-own-key), so split-lab itself never pays for or rate-
       limits anyone's usage. **Security note to get right when this lands**: an LLM key is not

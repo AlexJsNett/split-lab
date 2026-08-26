@@ -27,14 +27,14 @@ Repo layout, `apps/api` folder architecture (FSD-inspired), and per-app tech sta
 ## Domain model & milestones
 
 - Full domain model + deterministic bucketing explanation: `.agents/guides/project-overview.md`
-- Full milestone list (M1–M16): `.agents/project/milestones.md`
+- Full milestone list (M1–M19): `.agents/project/milestones.md`
 
-**Current milestone: M15 — Client SDK** (M1–M14 done — M14 hardened the pre-existing CI into a
-real gate: path-filtered jobs, e2e suites running against real Postgres/RabbitMQ/Elasticsearch
-in CI for the first time, and a Render deploy that now waits on CI passing instead of firing
-independently. The "AWS" half landed on Render free tier + CloudAMQP instead of EC2/S3/Lambda —
-no credit card wanted for a learning project — live-verified end-to-end; see `ci.md`).
-Open `milestones.md` for details.
+**Current milestone: M15 — Multi-user auth** (M1–M14 done — M14 hardened the pre-existing CI
+into a real deploy gate, live-verified on Render; see `ci.md`. M15 is Google/GitHub OAuth +
+email/password with verification for `apps/web`'s dashboard — Claude-authored hand-over
+exception like M11–M14, plan locked at `.omc/plans/oauth-multi-user-auth.md`, **implementation
+not started yet — awaiting the developer's explicit go-ahead**. M16 Client SDK and everything
+after it shifted up by one to make room). Open `milestones.md` for details.
 
 ## Working agreement
 
