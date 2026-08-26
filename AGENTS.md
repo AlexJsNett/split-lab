@@ -42,12 +42,6 @@ removed in M10, RabbitMQ replaced it rather than running alongside it — and El
 M12, `docker compose up -d elasticsearch` / `docker-compose up -d elasticsearch` if the plain
 `docker compose` subcommand isn't installed).
 
-`apps/api` also has `pnpm run search:reindex` / `search:reindex:test` (mirrors
-`migration:run`/`migration:run:test` — its own `Pool`+Drizzle+ES `Client`, no Nest DI) —
-rebuilds both Elasticsearch indices from Postgres from scratch. Run it after
-`docker compose up -d elasticsearch` the first time, and any time the search mapping changes;
-see `.agents/guides/backend/search.md`.
-
 **Whole stack in one command (M13):** `docker compose up --build` (or `docker-compose up
 --build` — same fallback as above) now brings up all six services together — the three infra
 containers above plus `apps/api`, `apps/event-processor`, and `apps/web`, wired to talk to
@@ -128,31 +122,9 @@ Monorepo, npm workspaces, one root git repo.
 Import boundary: `apps/web` talks to `apps/api` only over HTTP (fetch calls to REST
 endpoints). It never imports backend code, never touches the DB directly.
 
-### apps/web tooling
-
-Scaffolded via `create-next-app` (TypeScript, App Router, Tailwind CSS, ESLint, no `src/`
-directory). M6 picked the concrete choices: shadcn/ui (on `@base-ui/react`, not Radix) +
-Tailwind for components, plain server-side `fetch` (`cache: "no-store"`) for data — no
-client-state library, since the dashboard is currently 100% read-only Server Components.
-
-**React Aria** (`react-aria-components`) is the planned choice for the complex interactive
-form components M16/M18 will need (date range picker for results filtering, combobox, etc.)
-— decided 2026-08-11, **not added yet**, same "don't add speculatively" discipline as M6:
-wait until there's a real form screen to build it against, not before.
-
-### apps/api (target shape, fills in per milestone)
-
-Folder architecture is FSD-inspired + screaming + clean-architecture-lite, not the default
-Nest tutorial layout. Full convention and rationale: `.agents/guides/backend/api-patterns.md`
-— read it before scaffolding M1, it decides where files go from the start.
-
-- `entities/<noun>/` (domain + infrastructure) for things with a table behind them; `features/<verb>/` for use-cases that read/write them. No top-level `controllers/`/`services/`/`dto/` buckets.
-- Drizzle schemas + migrations, no `drizzle-kit push` outside local scratch experiments.
-- `class-validator` DTOs at the controller boundary — never trust raw request bodies past
-  the DTO layer.
-- Async work (event ingestion) goes through RabbitMQ to `apps/event-processor` (a separate
-  NestJS microservice, M10 — BullMQ/Redis were used through M9, fully replaced since) — not
-  inline in the request handler.
+Per-app conventions (folder architecture, framework-specific tooling, what each app owns)
+live in that app's own `CLAUDE.md`, not here — this file stays cross-cutting. Walk down into
+`apps/api/CLAUDE.md`, `apps/event-processor/CLAUDE.md`, or `apps/web/CLAUDE.md` for that.
 
 ## Code Conventions
 
