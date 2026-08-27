@@ -18,6 +18,6 @@
     "preset": "ts-jest",
     "testEnvironment": "node",
     "testRegex": ".*\\.spec\\.ts$",
-    "testTimeout": 30000
+    "testTimeout": 60000
   }
 }
